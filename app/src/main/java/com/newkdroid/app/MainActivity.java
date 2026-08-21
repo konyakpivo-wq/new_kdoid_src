@@ -10,18 +10,18 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        int[] buttons = {
-                R.id.newAppsButton,
-                R.id.appsButton,
-                R.id.utilitiesButton,
-                R.id.systemButton,
-                R.id.settingsButton
-        };
+        setAction(R.id.newAppsButton, "Новинки");
+        setAction(R.id.appsButton, "Приложения");
+        setAction(R.id.utilitiesButton, "Утилиты");
+        setAction(R.id.systemButton, "Системные приложения");
+        setAction(R.id.settingsButton, "Настройки");
+        setAction(R.id.searchButton, "Поиск");
+        setAction(R.id.updateButton, "Проверка обновлений каталога");
+    }
 
-        for (int id : buttons) {
-            findViewById(id).setOnClickListener(v ->
-                    Toast.makeText(this, "Раздел будет добавлен на следующем этапе", Toast.LENGTH_SHORT).show()
-            );
-        }
+    private void setAction(int id, String title) {
+        findViewById(id).setOnClickListener(v ->
+                Toast.makeText(this, title + " — скоро будет доступно", Toast.LENGTH_SHORT).show()
+        );
     }
 }
