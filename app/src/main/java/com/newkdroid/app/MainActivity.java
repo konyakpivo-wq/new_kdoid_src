@@ -10,7 +10,6 @@ import android.os.Bundle;
 import android.view.Gravity;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.text.TextWatcher;
@@ -124,8 +123,16 @@ public class MainActivity extends Activity {
     }
 
     private void showSettings() {
-        new AlertDialog.Builder(this).setTitle("Настройки New KDroid")
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Настройки New KDroid")
                 .setMessage("Каталог: v" + catalogVersion + "\n\nПредложения по добавлению репозиториев:\ndemoda228@gmail.com\n\nNew KDroid использует GitHub как источник приложений и релизов.")
-                .setPositiveButton("OK", null).show();
+                .setPositiveButton("OK", null)
+                .setNeutralButton("Администратор", null)
+                .create();
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
+            dialog.dismiss();
+            startActivity(new Intent(MainActivity.this, AdminActivity.class));
+        }));
+        dialog.show();
     }
 }
