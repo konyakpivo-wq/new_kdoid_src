@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">New KDroid</string>
+    <string name="welcome">New KDroid</string>
+    <string name="new_apps">Новинки</string>
+    <string name="apps">Приложения</string>
+    <string name="utilities">Утилиты</string>
+    <string name="system">Системные</string>
+    <string name="settings">Настройки</string>
+</resources>
