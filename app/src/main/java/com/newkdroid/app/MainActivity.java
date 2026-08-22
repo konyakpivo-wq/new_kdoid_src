@@ -1,85 +1,34 @@
 package com.newkdroid.app;
 
-import android.app.Activity;
-import android.app.AlertDialog;
-import android.content.Intent;
+import android.app.*;
+import android.content.*;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
-import android.os.Bundle;
+import android.os.*;
+import android.provider.Settings;
 import android.view.Gravity;
-import android.widget.EditText;
-import android.widget.LinearLayout;
-import android.widget.TextView;
-import android.widget.Toast;
-import android.text.TextWatcher;
-import android.text.Editable;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
+import android.widget.*;
+import android.text.*;
+import androidx.core.content.FileProvider;
+import java.io.File;
+import java.util.*;
 
 public class MainActivity extends Activity {
     private static final String ADMIN_CODE = "iixc_hgxd_kyft";
-    private LinearLayout list;
-    private EditText search;
-    private TextView status;
-    private final List<CatalogManager.AppEntry> allApps = new ArrayList<>();
-    private CatalogManager manager;
-    private int catalogVersion = 0;
-
-    @Override protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-        manager = new CatalogManager();
-        list = findViewById(R.id.appList); search = findViewById(R.id.searchBox); status = findViewById(R.id.statusText);
-        findViewById(R.id.refreshButton).setOnClickListener(v -> loadCatalog(true));
-        findViewById(R.id.settingsButton).setOnClickListener(v -> showSettings());
-        findViewById(R.id.newAppsButton).setOnClickListener(v -> render(""));
-        findViewById(R.id.appsButton).setOnClickListener(v -> showCategory("Приложения"));
-        findViewById(R.id.utilitiesButton).setOnClickListener(v -> showCategory("Утилиты"));
-        findViewById(R.id.systemButton).setOnClickListener(v -> showCategory("Системные"));
-        search.addTextChangedListener(new TextWatcher() { public void beforeTextChanged(CharSequence s,int a,int b,int c){} public void onTextChanged(CharSequence s,int a,int b,int c){ render(s.toString()); } public void afterTextChanged(Editable e){} });
-        loadCatalog(false);
-    }
-
-    private void loadCatalog(boolean manual) {
-        status.setText("Обновляем каталог…");
-        manager.loadCatalog(new CatalogManager.Callback() {
-            @Override public void onSuccess(List<CatalogManager.AppEntry> apps, int version) { runOnUiThread(() -> { allApps.clear(); allApps.addAll(apps); catalogVersion=version; status.setText("Каталог v"+version+" • "+apps.size()+" приложений"); render(search.getText().toString()); if(manual) Toast.makeText(MainActivity.this,"Каталог обновлён",Toast.LENGTH_SHORT).show(); }); }
-            @Override public void onError(Exception error) { runOnUiThread(() -> status.setText("Не удалось загрузить каталог. Проверьте интернет.")); }
-        });
-    }
-
-    private void render(String query) {
-        list.removeAllViews(); String q=query==null?"":query.trim().toLowerCase(Locale.ROOT);
-        for(CatalogManager.AppEntry app:allApps) { if(!q.isEmpty() && !(app.name+" "+app.description+" "+app.category).toLowerCase(Locale.ROOT).contains(q)) continue; addCard(app); }
-        if(list.getChildCount()==0){ TextView empty=label("Ничего не найдено",18,Color.GRAY); empty.setGravity(Gravity.CENTER); list.addView(empty,new LinearLayout.LayoutParams(-1,180)); }
-    }
-
-    private void showCategory(String category) { list.removeAllViews(); for(CatalogManager.AppEntry app:allApps) if(category.equals(app.category)) addCard(app); if(list.getChildCount()==0){ TextView empty=label("В этой категории пока нет приложений",16,Color.GRAY); empty.setGravity(Gravity.CENTER); list.addView(empty,new LinearLayout.LayoutParams(-1,160)); } }
-
-    private void addCard(CatalogManager.AppEntry app) {
-        LinearLayout card=new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setPadding(24,20,24,20);
-        GradientDrawable bg=new GradientDrawable(); bg.setColor(Color.WHITE); bg.setCornerRadius(28); card.setBackground(bg); card.setElevation(3);
-        TextView title=label(app.name,20,Color.rgb(30,30,34)); TextView desc=label(app.description,14,Color.rgb(100,100,105)); desc.setPadding(0,7,0,7); TextView cat=label(app.category,12,Color.rgb(103,80,164)); TextView install=label("УСТАНОВИТЬ",13,Color.rgb(103,80,164)); install.setGravity(Gravity.CENTER);
-        card.addView(title); card.addView(desc); card.addView(cat); GradientDrawable ibg=new GradientDrawable(); ibg.setColor(Color.rgb(244,239,251)); ibg.setCornerRadius(22); install.setBackground(ibg); LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(-1,48); ip.topMargin=12; card.addView(install,ip); install.setOnClickListener(v->chooseRelease(app)); LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2); cp.setMargins(0,0,0,16); list.addView(card,cp);
-    }
-
-    private TextView label(String text,int size,int color){ TextView t=new TextView(this); t.setText(text); t.setTextSize(size); t.setTextColor(color); return t; }
-
-    private void chooseRelease(CatalogManager.AppEntry app){ Toast.makeText(this,"Получаем версии…",Toast.LENGTH_SHORT).show(); manager.loadReleases(app.repository,new CatalogManager.ReleasesCallback(){ @Override public void onSuccess(List<CatalogManager.ReleaseEntry> releases){ runOnUiThread(()->{ if(releases.isEmpty()){Toast.makeText(MainActivity.this,"Релизов нет",Toast.LENGTH_SHORT).show();return;} String[] names=new String[releases.size()]; for(int i=0;i<names.length;i++)names[i]=releases.get(i).toString(); if(releases.size()==1)openRelease(releases.get(0)); else new AlertDialog.Builder(MainActivity.this).setTitle("Выберите версию").setItems(names,(d,w)->openRelease(releases.get(w))).setNegativeButton("Отмена",null).show(); }); } @Override public void onError(Exception error){runOnUiThread(()->Toast.makeText(MainActivity.this,"Ошибка GitHub",Toast.LENGTH_LONG).show());} }); }
-    private void openRelease(CatalogManager.ReleaseEntry release){ startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(release.htmlUrl))); }
-
-    private void showSettings() {
-        LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(12,4,12,0);
-        TextView info=label("Каталог: v"+catalogVersion+"\n\nПредложения по добавлению репозиториев:\ndemoda228@gmail.com",15,Color.DKGRAY); box.addView(info);
-        TextView admin=label("🔐  Войти как администратор",16,Color.rgb(80,60,130)); admin.setGravity(Gravity.CENTER_VERTICAL); admin.setPadding(18,18,18,18); GradientDrawable bg=new GradientDrawable(); bg.setColor(Color.rgb(244,240,250)); bg.setCornerRadius(22); admin.setBackground(bg); LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,60); p.topMargin=18; box.addView(admin,p); admin.setOnClickListener(v->showAdminLogin());
-        new AlertDialog.Builder(this).setTitle("Настройки New KDroid").setView(box).setPositiveButton("OK",null).show();
-    }
-
-    private void showAdminLogin(){
-        EditText input=new EditText(this); input.setHint("Код администратора"); input.setSingleLine(true); input.setInputType(0x00000081);
-        new AlertDialog.Builder(this).setTitle("Вход администратора").setMessage("Введите код администратора").setView(input).setPositiveButton("Войти",(d,w)->{ if(ADMIN_CODE.equals(input.getText().toString())){ startActivity(new Intent(this,AdminActivity.class)); } else Toast.makeText(this,"Неверный код администратора",Toast.LENGTH_LONG).show(); }).setNegativeButton("Отмена",null).show();
-    }
+    private LinearLayout list; private EditText search; private TextView status; private final List<CatalogManager.AppEntry> allApps=new ArrayList<>(); private CatalogManager manager; private int catalogVersion=0;
+    @Override protected void onCreate(Bundle b){super.onCreate(b);setContentView(R.layout.activity_main);manager=new CatalogManager();list=findViewById(R.id.appList);search=findViewById(R.id.searchBox);status=findViewById(R.id.statusText);findViewById(R.id.refreshButton).setOnClickListener(v->loadCatalog(true));findViewById(R.id.settingsButton).setOnClickListener(v->showSettings());findViewById(R.id.newAppsButton).setOnClickListener(v->render(""));findViewById(R.id.appsButton).setOnClickListener(v->showCategory("Приложения"));findViewById(R.id.utilitiesButton).setOnClickListener(v->showCategory("Утилиты"));findViewById(R.id.systemButton).setOnClickListener(v->showCategory("Системные"));search.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int d){}public void onTextChanged(CharSequence s,int a,int b,int c){render(s.toString());}public void afterTextChanged(Editable e){}});loadCatalog(false);}
+    private void loadCatalog(boolean manual){status.setText("Обновляем каталог…");manager.loadCatalog(new CatalogManager.Callback(){public void onSuccess(List<CatalogManager.AppEntry>a,int v){runOnUiThread(()->{allApps.clear();allApps.addAll(a);catalogVersion=v;status.setText("Каталог v"+v+" • "+a.size()+" приложений");render(search.getText().toString());if(manual)Toast.makeText(MainActivity.this,"Каталог обновлён",Toast.LENGTH_SHORT).show();});}public void onError(Exception e){runOnUiThread(()->status.setText("Не удалось загрузить каталог. Проверьте интернет."));}});}
+    private void render(String q0){list.removeAllViews();String q=q0==null?"":q0.trim().toLowerCase(Locale.ROOT);for(CatalogManager.AppEntry a:allApps){if(!q.isEmpty()&&!(a.name+" "+a.description+" "+a.category).toLowerCase(Locale.ROOT).contains(q))continue;addCard(a);}if(list.getChildCount()==0){TextView e=label("Ничего не найдено",18,Color.GRAY);e.setGravity(Gravity.CENTER);list.addView(e,new LinearLayout.LayoutParams(-1,180));}}
+    private void showCategory(String c){list.removeAllViews();for(CatalogManager.AppEntry a:allApps)if(c.equals(a.category))addCard(a);if(list.getChildCount()==0){TextView e=label("В этой категории пока нет приложений",16,Color.GRAY);e.setGravity(Gravity.CENTER);list.addView(e,new LinearLayout.LayoutParams(-1,160));}}
+    private void addCard(CatalogManager.AppEntry a){LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(24,20,24,20);GradientDrawable bg=new GradientDrawable();bg.setColor(Color.WHITE);bg.setCornerRadius(28);card.setBackground(bg);card.setElevation(3);TextView t=label(a.name,20,Color.rgb(30,30,34)),d=label(a.description,14,Color.rgb(100,100,105)),c=label(a.category,12,Color.rgb(103,80,164)),i=label("УСТАНОВИТЬ",13,Color.rgb(103,80,164));d.setPadding(0,7,0,7);i.setGravity(Gravity.CENTER);card.addView(t);card.addView(d);card.addView(c);GradientDrawable ib=new GradientDrawable();ib.setColor(Color.rgb(244,239,251));ib.setCornerRadius(22);i.setBackground(ib);LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(-1,48);ip.topMargin=12;card.addView(i,ip);i.setOnClickListener(v->chooseRelease(a));LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.setMargins(0,0,0,16);list.addView(card,cp);}
+    private TextView label(String s,int size,int color){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);return t;}
+    private void chooseRelease(CatalogManager.AppEntry a){Toast.makeText(this,"Получаем версии…",Toast.LENGTH_SHORT).show();manager.loadReleases(a.repository,new CatalogManager.ReleasesCallback(){public void onSuccess(List<CatalogManager.ReleaseEntry> r){runOnUiThread(()->{if(r.isEmpty()){toast("Релизов нет");return;}String[] n=new String[r.size()];for(int i=0;i<n.length;i++)n[i]=r.get(i).toString();if(r.size()==1)startDownload(r.get(0),a.name);else new AlertDialog.Builder(MainActivity.this).setTitle("Выберите версию").setItems(n,(d,w)->startDownload(r.get(w),a.name)).setNegativeButton("Отмена",null).show();});}public void onError(Exception e){runOnUiThread(()->toast("Ошибка GitHub: "+e.getMessage()));}});}
+    private void startDownload(CatalogManager.ReleaseEntry release,String appName){CatalogManager.AssetEntry asset=CatalogManager.chooseApk(release);if(asset==null){toast("В этом релизе не найден подходящий APK");return;}File file=new File(getCacheDir(),"newkdroid_"+safe(appName)+"_"+safe(release.tag)+".apk");ProgressBar bar=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);bar.setMax(100);bar.setProgress(0);TextView text=label("Подготовка скачивания…",15,Color.DKGRAY);LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(24,12,24,12);box.addView(text);box.addView(bar);AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Скачивание "+appName).setView(box).setNegativeButton("Отмена",null).create();dialog.show();manager.downloadApk(asset.downloadUrl,file,new CatalogManager.DownloadCallback(){public void onProgress(int p){runOnUiThread(()->{bar.setProgress(p);text.setText("Скачивание… "+p+"%");});}public void onSuccess(File f){runOnUiThread(()->{dialog.dismiss();installApk(f);});}public void onError(Exception e){runOnUiThread(()->{dialog.dismiss();toast("Ошибка скачивания: "+e.getMessage());});}});}
+    private String safe(String s){return s==null?"app":s.replaceAll("[^A-Za-z0-9._-]","_");}
+    private void installApk(File file){if(Build.VERSION.SDK_INT>=26&&!getPackageManager().canRequestPackageInstalls()){new AlertDialog.Builder(this).setTitle("Требуется разрешение").setMessage("Разрешите New KDroid устанавливать приложения из неизвестных источников.").setPositiveButton("Открыть настройки",(d,w)->{try{startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:"+getPackageName())));}catch(Exception e){startActivity(new Intent(Settings.ACTION_SECURITY_SETTINGS));}}).setNegativeButton("Отмена",null).show();return;}try{Uri uri=FileProvider.getUriForFile(this,"com.newkdroid.app.fileprovider",file);Intent i=new Intent(Intent.ACTION_VIEW);i.setDataAndType(uri,"application/vnd.android.package-archive");i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_ACTIVITY_NEW_TASK);startActivity(i);}catch(Exception e){toast("Не удалось открыть установщик: "+e.getMessage());}}
+    private void showSettings(){LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(12,4,12,0);TextView info=label("Каталог: v"+catalogVersion+"\n\nПредложения по добавлению репозиториев:\ndemoda228@gmail.com",15,Color.DKGRAY);box.addView(info);TextView admin=label("🔐  Войти как администратор",16,Color.rgb(80,60,130));admin.setGravity(Gravity.CENTER_VERTICAL);admin.setPadding(18,18,18,18);GradientDrawable bg=new GradientDrawable();bg.setColor(Color.rgb(244,240,250));bg.setCornerRadius(22);admin.setBackground(bg);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,60);p.topMargin=18;box.addView(admin,p);admin.setOnClickListener(v->showAdminLogin());new AlertDialog.Builder(this).setTitle("Настройки New KDroid").setView(box).setPositiveButton("OK",null).show();}
+    private void showAdminLogin(){EditText input=new EditText(this);input.setHint("Код администратора");input.setSingleLine(true);input.setInputType(0x00000081);new AlertDialog.Builder(this).setTitle("Вход администратора").setMessage("Введите код администратора").setView(input).setPositiveButton("Войти",(d,w)->{if(ADMIN_CODE.equals(input.getText().toString()))startActivity(new Intent(this,AdminActivity.class));else toast("Неверный код администратора");}).setNegativeButton("Отмена",null).show();}
+    private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_LONG).show();}
 }
