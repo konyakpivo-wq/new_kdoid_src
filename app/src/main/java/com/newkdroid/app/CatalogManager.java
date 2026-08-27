@@ -32,28 +32,23 @@ public final class CatalogManager {
         @Override public String toString(){return (name==null||name.isEmpty())?tag:name+" ("+tag+")";}
     }
 
-    /** Finds every numeric *_repo.txt file in apprepo, so IDs 11, 12, 13... are detected automatically. */
+    /** Reads numeric .repo files. One file describes one application. IDs are discovered automatically. */
     public void loadCatalog(Callback callback){executor.execute(()->{try{
         String listing=get(APPREPO_API);
         JSONArray files=new JSONArray(listing);
-        TreeSet<Integer> ids=new TreeSet<>();
+        List<Integer> ids=new ArrayList<>();
         for(int i=0;i<files.length();i++){
             JSONObject f=files.getJSONObject(i);
             String name=f.optString("name","");
-            if(name.matches("\\d+_repo\\.txt")) ids.add(Integer.parseInt(name.substring(0,name.indexOf('_'))));
+            if(name.matches("\\d+\\.repo")) ids.add(Integer.parseInt(name.substring(0,name.length()-5)));
         }
+        Collections.sort(ids);
         List<AppEntry> apps=new ArrayList<>();
         for(Integer id:ids){
             try{
-                String repoText=get(rawUrl(id+"_repo.txt"));
-                String decaText=get(rawUrl(id+"_deca.txt"));
-                String repository=repositoryFromRepoFile(repoText);
-                String[] meta=parseDeca(decaText,id);
-                if(repository!=null&&!repository.isEmpty()&&meta!=null){
-                    // The application name comes from the repository name; d: is the description.
-                    String appName=repositoryName(repository);
-                    apps.add(new AppEntry(id,appName,repository,meta[0],meta[1]));
-                }
+                String text=get(rawUrl(id+".repo"));
+                RepoData data=parseRepo(text,id);
+                if(data!=null && !data.repository.isEmpty()) apps.add(new AppEntry(id,data.name,data.repository,data.category,data.description));
             }catch(Exception ignored){ }
         }
         callback.onSuccess(apps, apps.size());
@@ -61,28 +56,43 @@ public final class CatalogManager {
 
     private String rawUrl(String file){return "https://raw.githubusercontent.com/konyakpivo-wq/new_kdoid/main/apprepo/"+file;}
 
-    private String repositoryFromRepoFile(String text){
-        String line=text==null?"":text.trim();
-        int start=line.indexOf("repo:");
-        if(start>=0) line=line.substring(start+5).trim();
-        int marker=line.indexOf(" (id:");
-        if(marker>0) line=line.substring(0,marker).trim();
-        return repositoryFromUrl(line);
+    private static final class RepoData {
+        String repository,name,description,category;
+        RepoData(String r,String n,String d,String c){repository=r;name=n;description=d;category=c;}
     }
 
-    private String[] parseDeca(String text,int expectedId){
-        String id="",cid="",d="";
-        String[] lines=text.split("\\r?\\n");
+    /**
+     * .repo format:
+     * line 1 = GitHub repository (owner/repo or full URL)
+     * line 2 = application name
+     * line 3 = description
+     * line 4 = category
+     * Optional lines may be written as id:, cid:, d:, name:, repo:.
+     */
+    private RepoData parseRepo(String text,int expectedId){
+        String[] lines=text.replace("\r","").split("\n");
+        ArrayList<String> plain=new ArrayList<>();
+        String repository="",name="",description="",category="";
         for(String raw:lines){
             String line=raw.trim();
-            if(line.startsWith("id:")) id=line.substring(3).trim();
-            else if(line.startsWith("cid:")) cid=line.substring(4).trim();
-            else if(line.startsWith("d:")) d=line.substring(2).trim();
+            if(line.isEmpty() || line.startsWith("#")) continue;
+            if(line.startsWith("repo:")) repository=line.substring(5).trim();
+            else if(line.startsWith("name:")) name=line.substring(5).trim();
+            else if(line.startsWith("d:")) description=line.substring(2).trim();
+            else if(line.startsWith("category:")) category=line.substring(9).trim();
+            else if(line.startsWith("cid:")) category=categoryName(line.substring(4).trim());
+            else if(line.startsWith("id:")) { /* ID is the filename; optional field accepted. */ }
+            else plain.add(line);
         }
-        if(id.isEmpty()) id=String.valueOf(expectedId);
-        if(d.isEmpty()) return null;
-        String category=categoryName(cid);
-        return new String[]{category,d};
+        if(repository.isEmpty() && plain.size()>0) repository=plain.get(0);
+        if(name.isEmpty() && plain.size()>1) name=plain.get(1);
+        if(description.isEmpty() && plain.size()>2) description=plain.get(2);
+        if(category.isEmpty() && plain.size()>3) category=plain.get(3);
+        repository=repositoryFromUrl(repository);
+        if(name.isEmpty()) name=repositoryName(repository);
+        if(description.isEmpty()) description="";
+        if(category.isEmpty()) category="Другое";
+        return repository.isEmpty()?null:new RepoData(repository,name,description,category);
     }
 
     private String categoryName(String cid){
@@ -109,7 +119,7 @@ public final class CatalogManager {
 
     public static AssetEntry chooseApk(ReleaseEntry r){List<AssetEntry> good=new ArrayList<>();for(AssetEntry a:r.assets){String n=a.name.toLowerCase(Locale.ROOT);if(!n.endsWith(".apk")||n.contains("src")||n.contains("source")||n.contains("debug")||n.contains("test"))continue;good.add(a);}if(good.isEmpty())return null;String arch=android.os.Build.SUPPORTED_ABIS.length>0?android.os.Build.SUPPORTED_ABIS[0]:"";for(AssetEntry a:good){String n=a.name.toLowerCase(Locale.ROOT);if((arch.contains("arm64")&&n.contains("arm64"))||(arch.contains("armeabi")&&n.contains("armeabi"))||(arch.contains("x86_64")&&n.contains("x86_64"))||(arch.equals("x86")&&n.contains("x86")))return a;}for(AssetEntry a:good)if(a.name.toLowerCase(Locale.ROOT).contains("universal"))return a;return good.get(0);}
 
-    public void downloadApk(String url,File target,DownloadCallback cb){executor.execute(()->{HttpURLConnection c=null;try{c=(HttpURLConnection)new URL(url).openConnection();c.setConnectTimeout(15000);c.setReadTimeout(30000);c.setRequestProperty("User-Agent","New-KDroid/0.3");int code=c.getResponseCode();if(code<200||code>=300)throw new IOException("HTTP "+code);long total=c.getContentLengthLong();try(InputStream in=new BufferedInputStream(c.getInputStream());OutputStream out=new BufferedOutputStream(new FileOutputStream(target))){byte[] buf=new byte[8192];long done=0;int len;while((len=in.read(buf))!=-1){out.write(buf,0,len);done+=len;if(total>0)cb.onProgress((int)(done*100/total));}}cb.onProgress(100);cb.onSuccess(target);}catch(Exception e){if(target.exists())target.delete();cb.onError(e);}finally{if(c!=null)c.disconnect();}});}
+    public void downloadApk(String url,File target,DownloadCallback cb){executor.execute(()->{HttpURLConnection c=null;try{c=(HttpURLConnection)new URL(url).openConnection();c.setConnectTimeout(15000);c.setReadTimeout(30000);c.setRequestProperty("User-Agent","New-KDroid/0.4");int code=c.getResponseCode();if(code<200||code>=300)throw new IOException("HTTP "+code);long total=c.getContentLengthLong();try(InputStream in=new BufferedInputStream(c.getInputStream());OutputStream out=new BufferedOutputStream(new FileOutputStream(target))){byte[] buf=new byte[8192];long done=0;int len;while((len=in.read(buf))!=-1){out.write(buf,0,len);done+=len;if(total>0)cb.onProgress((int)(done*100/total));}}cb.onProgress(100);cb.onSuccess(target);}catch(Exception e){if(target.exists())target.delete();cb.onError(e);}finally{if(c!=null)c.disconnect();}});}
 
-    private String get(String address)throws Exception{HttpURLConnection c=(HttpURLConnection)new URL(address).openConnection();c.setRequestMethod("GET");c.setConnectTimeout(10000);c.setReadTimeout(15000);c.setRequestProperty("Accept","application/json, text/plain");c.setRequestProperty("User-Agent","New-KDroid/0.3");try{int code=c.getResponseCode();InputStream s=code>=200&&code<300?c.getInputStream():c.getErrorStream();if(s==null)throw new IOException("HTTP "+code);BufferedReader r=new BufferedReader(new InputStreamReader(s,StandardCharsets.UTF_8));StringBuilder b=new StringBuilder();String line;while((line=r.readLine())!=null)b.append(line).append('\n');if(code<200||code>=300)throw new IOException("HTTP "+code);return b.toString();}finally{c.disconnect();}}
+    private String get(String address)throws Exception{HttpURLConnection c=(HttpURLConnection)new URL(address).openConnection();c.setRequestMethod("GET");c.setConnectTimeout(10000);c.setReadTimeout(15000);c.setRequestProperty("Accept","application/json, text/plain");c.setRequestProperty("User-Agent","New-KDroid/0.4");try{int code=c.getResponseCode();InputStream s=code>=200&&code<300?c.getInputStream():c.getErrorStream();if(s==null)throw new IOException("HTTP "+code);BufferedReader r=new BufferedReader(new InputStreamReader(s,StandardCharsets.UTF_8));StringBuilder b=new StringBuilder();String line;while((line=r.readLine())!=null)b.append(line).append('\n');if(code<200||code>=300)throw new IOException("HTTP "+code);return b.toString();}finally{c.disconnect();}}
 }
