@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="kdroid_primary">#BB86FC</color>
+    <color name="kdroid_background">#121214</color>
+    <color name="kdroid_surface">#1E1E22</color>
+    <color name="kdroid_text">#FFFFFF</color>
+    <color name="kdroid_secondary_text">#C8C5CC</color>
+</resources>
