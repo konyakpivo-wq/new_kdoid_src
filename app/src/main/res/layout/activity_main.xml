@@ -3,37 +3,27 @@
     android:layout_width="match_parent" android:layout_height="match_parent"
     android:orientation="vertical" android:background="@color/kdroid_background">
 
-    <LinearLayout
-        android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:orientation="vertical" android:padding="20dp">
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="New KDroid" android:textSize="30sp" android:textStyle="bold"
-            android:textColor="@color/kdroid_text" />
-        <TextView android:id="@+id/statusText" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:layout_marginTop="4dp" android:text="Загрузка каталога…" android:textSize="13sp"
-            android:textColor="@color/kdroid_secondary_text" />
-        <LinearLayout android:layout_width="match_parent" android:layout_height="50dp" android:layout_marginTop="16dp"
-            android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/bg_search" android:paddingStart="14dp" android:paddingEnd="8dp">
-            <EditText android:id="@+id/searchBox" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-                android:hint="Поиск приложений" android:background="@android:color/transparent" android:singleLine="true"
-                android:textColor="@color/kdroid_text" android:textColorHint="@color/kdroid_secondary_text" />
-            <TextView android:id="@+id/refreshButton" android:layout_width="44dp" android:layout_height="44dp"
-                android:gravity="center" android:text="↻" android:textSize="25sp" android:textColor="@color/kdroid_primary" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="New KDroid" android:textSize="30sp" android:textStyle="bold" android:textColor="?android:attr/textColorPrimary" />
+        <TextView android:id="@+id/statusText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Загрузка каталога…" android:textSize="13sp" android:textColor="?android:attr/textColorSecondary" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="50dp" android:layout_marginTop="16dp" android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/bg_search" android:paddingStart="14dp" android:paddingEnd="8dp">
+            <EditText android:id="@+id/searchBox" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:hint="Поиск приложений" android:background="@android:color/transparent" android:singleLine="true" android:textColor="?android:attr/textColorPrimary" android:textColorHint="?android:attr/textColorSecondary" />
+            <TextView android:id="@+id/refreshButton" android:layout_width="44dp" android:layout_height="44dp" android:gravity="center" android:text="↻" android:textSize="25sp" android:textColor="@color/kdroid_primary" />
         </LinearLayout>
     </LinearLayout>
 
     <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true">
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingStart="20dp" android:paddingEnd="20dp" android:paddingBottom="24dp">
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Каталог" android:textSize="22sp" android:textStyle="bold" android:textColor="@color/kdroid_text" android:layout_marginBottom="12dp" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Каталог" android:textSize="22sp" android:textStyle="bold" android:textColor="?android:attr/textColorPrimary" android:layout_marginBottom="12dp" />
             <LinearLayout android:id="@+id/appList" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
         </LinearLayout>
     </ScrollView>
 
-    <LinearLayout android:layout_width="match_parent" android:layout_height="72dp" android:orientation="horizontal" android:gravity="center" android:background="@color/kdroid_surface" android:elevation="8dp">
-        <TextView android:id="@+id/newAppsButton" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="Новинки" android:textSize="11sp" android:textColor="@color/kdroid_text" />
-        <TextView android:id="@+id/appsButton" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="Приложения" android:textSize="11sp" android:textColor="@color/kdroid_text" />
-        <TextView android:id="@+id/utilitiesButton" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="Утилиты" android:textSize="11sp" android:textColor="@color/kdroid_text" />
-        <TextView android:id="@+id/systemButton" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="Система" android:textSize="11sp" android:textColor="@color/kdroid_text" />
-        <TextView android:id="@+id/settingsButton" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="Настройки" android:textSize="11sp" android:textColor="@color/kdroid_text" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="72dp" android:orientation="horizontal" android:gravity="center" android:background="?android:attr/colorBackground" android:elevation="8dp">
+        <TextView android:id="@+id/newAppsButton" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="Новинки" android:textSize="11sp" android:textColor="?android:attr/textColorPrimary" />
+        <TextView android:id="@+id/appsButton" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="Приложения" android:textSize="11sp" android:textColor="?android:attr/textColorPrimary" />
+        <TextView android:id="@+id/utilitiesButton" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="Утилиты" android:textSize="11sp" android:textColor="?android:attr/textColorPrimary" />
+        <TextView android:id="@+id/systemButton" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="Система" android:textSize="11sp" android:textColor="?android:attr/textColorPrimary" />
+        <TextView android:id="@+id/settingsButton" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:text="Настройки" android:textSize="11sp" android:textColor="?android:attr/textColorPrimary" />
     </LinearLayout>
 </LinearLayout>
