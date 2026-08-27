@@ -1,22 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.NewKDroid" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="Theme.NewKDroid" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:colorAccent">@color/kdroid_primary</item>
         <item name="android:windowBackground">@color/kdroid_background</item>
         <item name="android:navigationBarColor">@color/kdroid_background</item>
         <item name="android:statusBarColor">@color/kdroid_background</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar">true</item>
-    </style>
-    <style name="Theme.NewKDroid.Dark" parent="android:style/Theme.Material.NoActionBar">
-        <item name="android:fontFamily">sans</item>
-        <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:colorAccent">#BB86FC</item>
-        <item name="android:windowBackground">#121214</item>
-        <item name="android:navigationBarColor">#121214</item>
-        <item name="android:statusBarColor">#121214</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
     </style>
