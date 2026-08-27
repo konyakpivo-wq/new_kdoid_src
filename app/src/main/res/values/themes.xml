@@ -10,4 +10,14 @@
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
     </style>
+    <style name="Theme.NewKDroid.Dark" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:colorAccent">#BB86FC</item>
+        <item name="android:windowBackground">#121214</item>
+        <item name="android:navigationBarColor">#121214</item>
+        <item name="android:statusBarColor">#121214</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
 </resources>
