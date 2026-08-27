@@ -49,7 +49,11 @@ public final class CatalogManager {
                 String decaText=get(rawUrl(id+"_deca.txt"));
                 String repository=repositoryFromRepoFile(repoText);
                 String[] meta=parseDeca(decaText,id);
-                if(repository!=null&&!repository.isEmpty()&&meta!=null) apps.add(new AppEntry(id,meta[0],repository,meta[1],meta[2]));
+                if(repository!=null&&!repository.isEmpty()&&meta!=null){
+                    // The application name comes from the repository name; d: is the description.
+                    String appName=repositoryName(repository);
+                    apps.add(new AppEntry(id,appName,repository,meta[0],meta[1]));
+                }
             }catch(Exception ignored){ }
         }
         callback.onSuccess(apps, apps.size());
@@ -78,8 +82,7 @@ public final class CatalogManager {
         if(id.isEmpty()) id=String.valueOf(expectedId);
         if(d.isEmpty()) return null;
         String category=categoryName(cid);
-        String name=d;
-        return new String[]{name,category,d};
+        return new String[]{category,d};
     }
 
     private String categoryName(String cid){
@@ -87,6 +90,13 @@ public final class CatalogManager {
         if("2".equals(cid)) return "Приложения";
         if("3".equals(cid)) return "Утилиты";
         return cid.isEmpty()?"Другое":"Категория "+cid;
+    }
+
+    private String repositoryName(String repository){
+        String s=repository==null?"":repository.trim();
+        int slash=s.lastIndexOf('/');
+        String name=slash>=0?s.substring(slash+1):s;
+        return name.isEmpty()?"Приложение":name;
     }
 
     private String repositoryFromUrl(String url){String s=url.trim();if(s.endsWith("/"))s=s.substring(0,s.length()-1);if(s.endsWith(".git"))s=s.substring(0,s.length()-4);int x=s.indexOf("github.com/");return x>=0?s.substring(x+11):s;}
