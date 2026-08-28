@@ -8,7 +8,6 @@ import android.net.Uri;
 import android.os.*;
 import android.provider.Settings;
 import android.view.Gravity;
-import android.view.View;
 import android.widget.*;
 import android.text.*;
 import androidx.core.content.FileProvider;
@@ -20,7 +19,7 @@ public class MainActivity extends Activity {
     private final boolean dark=true;
     private final int primary=Color.rgb(187,134,252);
 
-    @Override protected void onCreate(Bundle b){super.onCreate(b);setTheme(R.style.Theme_NewKDroid_Dark);applyTheme();setContentView(R.layout.activity_main);manager=new CatalogManager();list=findViewById(R.id.appList);search=findViewById(R.id.searchBox);status=findViewById(R.id.statusText);findViewById(R.id.refreshButton).setOnClickListener(v->loadCatalog(true));findViewById(R.id.settingsButton).setOnClickListener(v->showSettings());findViewById(R.id.newAppsButton).setOnClickListener(v->render(""));findViewById(R.id.appsButton).setOnClickListener(v->showCategory("Приложения"));findViewById(R.id.utilitiesButton).setOnClickListener(v->showCategory("Утилиты"));findViewById(R.id.systemButton).setOnClickListener(v->showCategory("Системные"));search.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int d){}public void onTextChanged(CharSequence s,int a,int b,int c){render(s.toString());}public void afterTextChanged(Editable e){}});loadCatalog(false);}
+    @Override protected void onCreate(Bundle b){super.onCreate(b);setTheme(R.style.Theme_NewKDroid);applyTheme();setContentView(R.layout.activity_main);manager=new CatalogManager();list=findViewById(R.id.appList);search=findViewById(R.id.searchBox);status=findViewById(R.id.statusText);findViewById(R.id.refreshButton).setOnClickListener(v->loadCatalog(true));findViewById(R.id.settingsButton).setOnClickListener(v->showSettings());findViewById(R.id.newAppsButton).setOnClickListener(v->render(""));findViewById(R.id.appsButton).setOnClickListener(v->showCategory("Приложения"));findViewById(R.id.utilitiesButton).setOnClickListener(v->showCategory("Утилиты"));findViewById(R.id.systemButton).setOnClickListener(v->showCategory("Системные"));search.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int d){}public void onTextChanged(CharSequence s,int a,int b,int c){render(s.toString());}public void afterTextChanged(Editable e){}});loadCatalog(false);}
 
     private void applyTheme(){int bg=Color.rgb(18,18,20);getWindow().setStatusBarColor(bg);getWindow().setNavigationBarColor(bg);getWindow().getDecorView().setSystemUiVisibility(0);}
     private void loadCatalog(boolean manual){status.setText("Обновляем каталог…");manager.loadCatalog(new CatalogManager.Callback(){public void onSuccess(List<CatalogManager.AppEntry>a,int v){runOnUiThread(()->{allApps.clear();allApps.addAll(a);catalogVersion=v;status.setText("Каталог • "+a.size()+" приложений");render(search.getText().toString());if(manual)Toast.makeText(MainActivity.this,"Каталог обновлён",Toast.LENGTH_SHORT).show();});}public void onError(Exception e){runOnUiThread(()->status.setText("Не удалось загрузить каталог. Проверьте интернет."));}});}
