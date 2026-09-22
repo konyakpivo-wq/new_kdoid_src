@@ -8,6 +8,7 @@ import android.net.Uri;
 import android.os.*;
 import android.provider.Settings;
 import android.view.Gravity;
+import android.view.View;
 import android.widget.*;
 import android.text.*;
 import androidx.core.content.FileProvider;
