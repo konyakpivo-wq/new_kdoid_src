@@ -32,7 +32,7 @@ public final class SourceManager {
     }
 
     private void add(String type,String url,String name,String description) {
-        JSONArray a=readSources();
+        JSONArray a=readSources(type);
         JSONObject o=new JSONObject();
         try { o.put("type",type);o.put("url",url);o.put("name",name);o.put("description",description);a.put(o); } catch(Exception ignored){}
         context.getSharedPreferences(PREFS,0).edit().putString(type,a.toString()).apply();
@@ -50,7 +50,6 @@ public final class SourceManager {
         return out;
     }
 
-    private JSONArray readSources(){ return new JSONArray(); }
     private JSONArray readSources(String type) {
         try{return new JSONArray(context.getSharedPreferences(PREFS,0).getString(type,"[]"));}catch(Exception e){return new JSONArray();}
     }
