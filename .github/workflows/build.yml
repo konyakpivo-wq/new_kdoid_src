@@ -50,3 +50,5 @@ jobs:
           name: new-kdroid-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      # Triggered again after the successful build to refresh the APK artifact.
