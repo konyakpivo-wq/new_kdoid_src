@@ -65,7 +65,7 @@ public final class SourceManager {
                     if(GITHUB.equals(s.type)) {
                         String repo=normalizeGitHub(s.url);
                         if(repo.isEmpty()) continue;
-                        out.add(new CatalogManager.AppEntry(id++,s.name.isEmpty()?repo:s.name,repo,"Сторонние",""+(s.description.isEmpty()?"GitHub":s.description)));
+                        out.add(new CatalogManager.AppEntry(id++,s.name.isEmpty()?repo:s.name,repo,"Сторонние",""+(s.description.isEmpty()?"GitHub":s.description),""));
                     } else if(FDS.equals(s.type)) {
                         String base=normalizeFdroid(s.url);
                         String index=get(indexUrl(base));
@@ -78,13 +78,13 @@ public final class SourceManager {
                             JSONObject app=apps.optJSONObject(pkg);
                             if(app==null) continue;
                             String name=app.optString("name",pkg);
-                            String desc=app.optString("summary",app.optString("description",""));
+                            String desc=app.optString("summary",app.optString("description",""));\n                            String icon=app.optString("icon","");\n                            if(icon.startsWith("icon/")) icon=base+icon;\n                            else if(!icon.isEmpty()&&!icon.startsWith("http://")&&!icon.startsWith("https://")) icon=base+icon;
                             JSONArray packages=app.optJSONArray("packages");
                             if(packages==null||packages.length()==0) continue;
                             JSONObject latest=packages.getJSONObject(packages.length()-1);
                             String apk=latest.optString("apkname","");
                             if(apk.isEmpty()) continue;
-                            out.add(new CatalogManager.AppEntry(id++,name,"FDROID|"+base+"|"+apk,"F-Droid",desc));
+                            out.add(new CatalogManager.AppEntry(id++,name,"FDROID|"+base+"|"+apk,"F-Droid",desc,icon));
                         }
                     }
                 }
