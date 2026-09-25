@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.*;
+import java.net.HttpURLConnection;
 
 public class MainActivity extends Activity {
     private LinearLayout list;
