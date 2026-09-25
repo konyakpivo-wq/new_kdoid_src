@@ -13,6 +13,12 @@ import android.widget.*;
 import android.text.*;
 import androidx.core.content.FileProvider;
 import java.io.File;
+import java.io.InputStream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import java.util.*;
 
 public class MainActivity extends Activity {
@@ -23,6 +29,7 @@ public class MainActivity extends Activity {
     private CatalogManager manager;
     private SourceManager sources;
     private static final int NKD_FOLDER_REQUEST=1001;
+    private static final int OBTAINIUM_JSON_REQUEST=1002;
 
     @Override protected void onCreate(Bundle b){
         super.onCreate(b);
@@ -121,25 +128,59 @@ public class MainActivity extends Activity {
     private void addCard(CatalogManager.AppEntry a){
         LinearLayout card=new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(24,20,24,20);
+        card.setPadding(20,18,20,18);
         GradientDrawable bg=new GradientDrawable();
         bg.setColor(Color.rgb(36,36,40));
         bg.setCornerRadius(28);
         card.setBackground(bg);
+
+        LinearLayout head=new LinearLayout(this);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        ImageView icon=new ImageView(this);
+        icon.setImageResource(android.R.drawable.sym_def_app_icon);
+        icon.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        GradientDrawable ibg=new GradientDrawable();
+        ibg.setColor(Color.rgb(55,55,60));ibg.setCornerRadius(22);icon.setBackground(ibg);
+        LinearLayout.LayoutParams iconParams=new LinearLayout.LayoutParams(68,68);
+        iconParams.rightMargin=16;head.addView(icon,iconParams);
+
+        LinearLayout titles=new LinearLayout(this);
+        titles.setOrientation(LinearLayout.VERTICAL);
         TextView t=label(a.name,20,Color.WHITE);
-        TextView d=label(a.description,14,Color.rgb(205,205,210));
         TextView c=label(a.category,12,Color.rgb(190,170,230));
+        titles.addView(t);titles.addView(c);
+        head.addView(titles,new LinearLayout.LayoutParams(0,-2,1));
+        card.addView(head);
+
+        TextView d=label(a.description,14,Color.rgb(205,205,210));
+        d.setPadding(0,12,0,0);card.addView(d);
         TextView i=label("УСТАНОВИТЬ",13,Color.rgb(220,205,240));
-        d.setPadding(0,7,0,7);
         i.setGravity(Gravity.CENTER);
-        card.addView(t);card.addView(d);card.addView(c);
-        GradientDrawable ib=new GradientDrawable();
-        ib.setColor(Color.rgb(58,48,70));ib.setCornerRadius(22);i.setBackground(ib);
+        GradientDrawable installBg=new GradientDrawable();
+        installBg.setColor(Color.rgb(58,48,70));installBg.setCornerRadius(22);i.setBackground(installBg);
         LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(-1,48);
         ip.topMargin=12;card.addView(i,ip);
         i.setOnClickListener(v->chooseRelease(a));
+        loadIcon(icon,a.iconUrl);
         LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);
         cp.setMargins(0,0,0,16);list.addView(card,cp);
+    }
+
+    private void loadIcon(ImageView view,String url){
+        if(url==null||url.trim().isEmpty())return;
+        new Thread(()->{
+            try{
+                HttpURLConnection c=(HttpURLConnection)new java.net.URL(url).openConnection();
+                c.setConnectTimeout(8000);c.setReadTimeout(12000);
+                c.setRequestProperty("User-Agent","New-KDroid/1.1.0");
+                if(c.getResponseCode()>=200&&c.getResponseCode()<300){
+                    android.graphics.Bitmap b=android.graphics.BitmapFactory.decodeStream(c.getInputStream());
+                    if(b!=null)runOnUiThread(()->view.setImageBitmap(b));
+                }
+                c.disconnect();
+            }catch(Exception ignored){}
+        }).start();
     }
 
     private TextView label(String s,int size,int color){
@@ -232,7 +273,7 @@ public class MainActivity extends Activity {
         box.addView(info);
         addSettingButton(box,"＋ Добавить GitHub репозиторий",v->addGitHubDialog());
         addSettingButton(box,"＋ Добавить F-Droid репозиторий",v->addFdroidDialog());
-        addSettingButton(box,"◈ Выбрать приложение из Obtainium",v->openObtainium());
+        addSettingButton(box,"◈ Obtainium",v->showObtainiumMenu());
         addSettingButton(box,"📁 Подключить папку NKD",v->chooseNkdFolder());
         new AlertDialog.Builder(this).setTitle("Настройки New KDroid").setView(box).setPositiveButton("Готово",null).show();
     }
@@ -272,8 +313,50 @@ public class MainActivity extends Activity {
         e.setSingleLine(true);e.setPadding(8,8,8,8);return e;
     }
 
+    private void showObtainiumMenu(){
+        String[] items={"Войти на сайт","Импортировать JSON"};
+        new AlertDialog.Builder(this).setTitle("Obtainium")
+            .setItems(items,(d,w)->{if(w==0)openObtainium();else chooseObtainiumJson();})
+            .setNegativeButton("Отмена",null).show();
+    }
+
     private void openObtainium(){
         try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://apps.obtainium.imranr.dev/")));}catch(Exception e){toast("Не удалось открыть Obtainium Apps");}
+    }
+
+    private void chooseObtainiumJson(){
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.setType("application/json");
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        startActivityForResult(i,OBTAINIUM_JSON_REQUEST);
+    }
+
+    private void importObtainiumJson(Uri uri){
+        try(InputStream in=getContentResolver().openInputStream(uri)){
+            BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8));
+            StringBuilder b=new StringBuilder();String line;
+            while((line=r.readLine())!=null)b.append(line);
+            JSONObject root=new JSONObject(b.toString());
+            JSONArray apps=root.optJSONArray("apps");
+            if(apps==null){toast("В JSON нет массива apps");return;}
+            int added=0;
+            for(int i=0;i<apps.length();i++){
+                JSONObject a=apps.optJSONObject(i);if(a==null)continue;
+                String url=a.optString("url","").trim();
+                if(url.isEmpty())continue;
+                String name=a.optString("name","").trim();
+                JSONObject settings=a.optJSONObject("additionalSettings");
+                String desc=settings==null?"":settings.optString("about","");
+                if(desc.isEmpty())desc=a.optString("description","");
+                if(name.isEmpty())name=url;
+                if(url.contains("github.com/")){
+                    sources.addGitHub(url,name,desc);
+                    added++;
+                }
+            }
+            if(added>0)loadCatalog(true);
+            else toast("В JSON не найдено поддерживаемых GitHub приложений");
+        }catch(Exception e){toast("Ошибка импорта JSON: "+e.getMessage());}
     }
 
     private void chooseNkdFolder(){
@@ -284,10 +367,14 @@ public class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
-        if(requestCode==NKD_FOLDER_REQUEST&&resultCode==RESULT_OK&&data!=null&&data.getData()!=null){
-            manager.saveStorageAccess(data.getData());
-            toast("Папка NKD подключена");
-            loadCatalog(true);
+        if(resultCode==RESULT_OK&&data!=null&&data.getData()!=null){
+            if(requestCode==NKD_FOLDER_REQUEST){
+                manager.saveStorageAccess(data.getData());
+                toast("Папка NKD подключена");
+                loadCatalog(true);
+            }else if(requestCode==OBTAINIUM_JSON_REQUEST){
+                importObtainiumJson(data.getData());
+            }
         }
     }
 
