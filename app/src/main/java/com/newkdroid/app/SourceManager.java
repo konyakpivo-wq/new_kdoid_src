@@ -153,27 +153,26 @@ public final class SourceManager {
 
                 reader.beginObject();
                 HashMap<String,Meta> metadata=new HashMap<>();
+                int[] next={id};
                 while(reader.hasNext()){
                     String key=reader.nextName();
                     if("apps".equals(key)){
                         readApps(reader,metadata);
                     }else if("packages".equals(key)){
-                        readPackages(reader,metadata,base,id,out);
-                        // readPackages returns through an int holder because JsonReader is streaming.
-                        id=nextId;
+                        readPackages(reader,metadata,base,next,out);
                     }else{
                         reader.skipValue();
                     }
                 }
                 reader.endObject();
             }
-            return nextId;
+            return next[0];
         } finally {
             c.disconnect();
         }
     }
 
-    private int nextId=100000;
+    
 
     private static final class Meta {
         String name="",summary="",description="",icon="";
@@ -202,7 +201,7 @@ public final class SourceManager {
         r.endArray();
     }
 
-    private void readPackages(JsonReader r,HashMap<String,Meta> metadata,String base,int ignoredId,List<CatalogManager.AppEntry> out)throws Exception {
+    private void readPackages(JsonReader r,HashMap<String,Meta> metadata,String base,int[] next,List<CatalogManager.AppEntry> out)throws Exception {
         r.beginObject();
         while(r.hasNext()){
             String pkg=r.nextName();
@@ -235,7 +234,7 @@ public final class SourceManager {
             String icon=m==null?"":m.icon;
             icon=resolveFdroidFile(base,icon);
 
-            out.add(new CatalogManager.AppEntry(nextId++,name,"FDROID|"+base+"|"+apk,"F-Droid",desc,icon));
+            out.add(new CatalogManager.AppEntry(next[0]++,name,"FDROID|"+base+"|"+apk,"F-Droid",desc,icon));
         }
         r.endObject();
     }
