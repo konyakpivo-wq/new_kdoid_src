@@ -1,6 +1,7 @@
 package com.newkdroid.app;
 
 import android.content.Context;
+import android.util.JsonReader;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.*;
@@ -21,7 +22,7 @@ public final class SourceManager {
     public SourceManager(Context c) { context = c.getApplicationContext(); }
 
     public static final class Source {
-        public final String type, url, name, description;
+        public final String type,url,name,description;
         Source(String t,String u,String n,String d){type=t;url=u;name=n;description=d;}
     }
 
@@ -55,7 +56,6 @@ public final class SourceManager {
     public List<Source> getSources() {
         List<Source> out=new ArrayList<>();
         boolean official=false;
-
         JSONArray fd=readSources(FDS);
         for(int i=0;i<fd.length();i++) try {
             JSONObject o=fd.getJSONObject(i);
@@ -63,18 +63,14 @@ public final class SourceManager {
             if(OFFICIAL_FDROID.equals(url)) official=true;
             out.add(new Source(FDS,url,o.optString("name"),o.optString("description")));
         } catch(Exception ignored){}
-
-        if(!official)
-            out.add(0,new Source(FDS,OFFICIAL_FDROID,"F-Droid","Официальный репозиторий F-Droid"));
+        if(!official) out.add(0,new Source(FDS,OFFICIAL_FDROID,"F-Droid","Официальный репозиторий F-Droid"));
 
         JSONArray gh=readSources(GITHUB);
         for(int i=0;i<gh.length();i++) try {
             JSONObject o=gh.getJSONObject(i);
             String repo=normalizeGitHub(o.optString("url"));
-            if(!repo.isEmpty())
-                out.add(new Source(GITHUB,repo,o.optString("name"),o.optString("description")));
+            if(!repo.isEmpty()) out.add(new Source(GITHUB,repo,o.optString("name"),o.optString("description")));
         } catch(Exception ignored){}
-
         return out;
     }
 
@@ -95,26 +91,40 @@ public final class SourceManager {
                 try {
                     if(GITHUB.equals(source.type)) {
                         String repo=normalizeGitHub(source.url);
-                        if(!repo.isEmpty()) loadGitHubApp(repo,source,id++,out);
+                        if(!repo.isEmpty()) {
+                            try {
+                                loadGitHubApp(repo,source,id++,out);
+                            } catch(Exception githubError) {
+                                // Импортированное приложение всё равно показываем.
+                                // GitHub нужен для релизов только после нажатия «Установить».
+                                String name=source.name.isEmpty()?repositoryName(repo):source.name;
+                                String desc=source.description.isEmpty()?"GitHub repository":source.description;
+                                out.add(new CatalogManager.AppEntry(id++,name,repo,"Сторонние",desc,""));
+                                if(firstError==null)firstError=githubError;
+                            }
+                        }
                     } else if(FDS.equals(source.type)) {
                         id=loadFdroidApps(normalizeFdroid(source.url),id,out);
                     }
                 } catch(Exception e) {
-                    if(firstError==null) firstError=e;
+                    if(firstError==null)firstError=e;
                 }
             }
 
-            // Важно: ошибка одного источника больше не удаляет уже загруженные
-            // приложения из других источников.
             if(!out.isEmpty()) cb.done(out);
             else if(firstError!=null) cb.error(firstError);
             else cb.done(out);
         });
     }
 
+    private String repositoryName(String repo){
+        int p=repo.lastIndexOf('/');
+        return p>=0&&p+1<repo.length()?repo.substring(p+1):repo;
+    }
+
     private void loadGitHubApp(String repo,Source source,int id,List<CatalogManager.AppEntry> out)throws Exception {
         String[] p=repo.split("/",2);
-        if(p.length!=2)return;
+        if(p.length!=2)throw new IOException("Некорректный GitHub репозиторий");
         JSONObject info=new JSONObject(get("https://api.github.com/repos/"+p[0]+"/"+p[1]));
         String name=source.name.isEmpty()?info.optString("name",repo):source.name;
         String desc=source.description.isEmpty()?info.optString("description","GitHub repository"):source.description;
@@ -123,62 +133,111 @@ public final class SourceManager {
         out.add(new CatalogManager.AppEntry(id,name,repo,"Сторонние",desc,icon));
     }
 
+    /*
+     * F-Droid index-v1 может занимать десятки мегабайт после распаковки.
+     * Поэтому больше НЕ создаём один огромный JSONObject.
+     * Читаем JSON потоково через Android JsonReader.
+     */
     private int loadFdroidApps(String base,int id,List<CatalogManager.AppEntry> out)throws Exception {
-        String json=get(indexUrl(base));
-        JSONObject root=new JSONObject(json);
-        JSONArray appList=root.optJSONArray("apps");
-        JSONObject packages=root.optJSONObject("packages");
-        if(appList==null||packages==null) throw new IOException("Некорректный F-Droid index");
+        HttpURLConnection c=(HttpURLConnection)new URL(indexUrl(base)).openConnection();
+        c.setConnectTimeout(20000);
+        c.setReadTimeout(90000);
+        c.setRequestProperty("User-Agent","New-KDroid/1.1.0");
+        c.setRequestProperty("Accept","application/json");
 
-        HashMap<String,JSONObject> metadata=new HashMap<>();
-        for(int i=0;i<appList.length();i++){
-            JSONObject a=appList.optJSONObject(i);
-            if(a!=null) {
-                String pkg=a.optString("packageName","");
-                if(!pkg.isEmpty()) metadata.put(pkg,a);
-            }
-        }
+        try {
+            int code=c.getResponseCode();
+            if(code<200||code>=300)throw new IOException("F-Droid HTTP "+code);
+            try(InputStream in=new BufferedInputStream(c.getInputStream());
+                JsonReader reader=new JsonReader(new InputStreamReader(in,StandardCharsets.UTF_8))) {
 
-        Iterator<String> keys=packages.keys();
-        while(keys.hasNext()){
-            String pkg=keys.next();
-            JSONArray versions=packages.optJSONArray(pkg);
-            if(versions==null||versions.length()==0)continue;
-
-            JSONObject latest=null;
-            for(int i=0;i<versions.length();i++){
-                JSONObject v=versions.optJSONObject(i);
-                if(v==null)continue;
-                if(latest==null||v.optLong("versionCode",0)>latest.optLong("versionCode",0))
-                    latest=v;
-            }
-            if(latest==null)continue;
-
-            String apk=latest.optString("apkName",latest.optString("apkname",""));
-            if(apk.isEmpty())continue;
-
-            JSONObject meta=metadata.get(pkg);
-            String name=pkg,desc="",icon="";
-            if(meta!=null){
-                name=meta.optString("name",pkg);
-                desc=meta.optString("summary",meta.optString("description",""));
-                icon=meta.optString("icon","");
-                JSONObject localized=meta.optJSONObject("localized");
-                if(localized!=null){
-                    JSONObject en=localized.optJSONObject("en-US");
-                    if(en!=null){
-                        if(name.equals(pkg))name=en.optString("name",name);
-                        if(desc.isEmpty())desc=en.optString("summary",desc);
-                        if(icon.isEmpty())icon=en.optString("icon",icon);
+                reader.beginObject();
+                HashMap<String,Meta> metadata=new HashMap<>();
+                while(reader.hasNext()){
+                    String key=reader.nextName();
+                    if("apps".equals(key)){
+                        readApps(reader,metadata);
+                    }else if("packages".equals(key)){
+                        readPackages(reader,metadata,base,id,out);
+                        // readPackages returns through an int holder because JsonReader is streaming.
+                        id=nextId;
+                    }else{
+                        reader.skipValue();
                     }
                 }
+                reader.endObject();
             }
-
-            icon=resolveFdroidFile(base,icon);
-            out.add(new CatalogManager.AppEntry(
-                id++,name,"FDROID|"+base+"|"+apk,"F-Droid",desc,icon));
+            return nextId;
+        } finally {
+            c.disconnect();
         }
-        return id;
+    }
+
+    private int nextId=100000;
+
+    private static final class Meta {
+        String name="",summary="",description="",icon="";
+    }
+
+    private void readApps(JsonReader r,HashMap<String,Meta> metadata)throws Exception {
+        r.beginArray();
+        while(r.hasNext()){
+            Meta m=new Meta();
+            String pkg="";
+            r.beginObject();
+            while(r.hasNext()){
+                String k=r.nextName();
+                if("packageName".equals(k))pkg=r.nextString();
+                else if("name".equals(k))m.name=r.nextString();
+                else if("summary".equals(k))m.summary=r.nextString();
+                else if("description".equals(k)){
+                    if(r.peek()==android.util.JsonToken.STRING)m.description=r.nextString();
+                    else r.skipValue();
+                }else if("icon".equals(k))m.icon=r.nextString();
+                else r.skipValue();
+            }
+            r.endObject();
+            if(!pkg.isEmpty())metadata.put(pkg,m);
+        }
+        r.endArray();
+    }
+
+    private void readPackages(JsonReader r,HashMap<String,Meta> metadata,String base,int ignoredId,List<CatalogManager.AppEntry> out)throws Exception {
+        r.beginObject();
+        while(r.hasNext()){
+            String pkg=r.nextName();
+            Meta m=metadata.get(pkg);
+            JSONObject latest=new JSONObject();
+            r.beginArray();
+            while(r.hasNext()){
+                r.beginObject();
+                long versionCode=0;
+                String apk="";
+                while(r.hasNext()){
+                    String k=r.nextName();
+                    if("versionCode".equals(k))versionCode=r.nextLong();
+                    else if("apkName".equals(k))apk=r.nextString();
+                    else r.skipValue();
+                }
+                r.endObject();
+                if(!apk.isEmpty()&&versionCode>=latest.optLong("versionCode",-1)){
+                    latest.put("versionCode",versionCode);
+                    latest.put("apkName",apk);
+                }
+            }
+            r.endArray();
+
+            String apk=latest.optString("apkName","");
+            if(apk.isEmpty())continue;
+
+            String name=m==null||m.name.isEmpty()?pkg:m.name;
+            String desc=m==null?"":(!m.summary.isEmpty()?m.summary:m.description);
+            String icon=m==null?"":m.icon;
+            icon=resolveFdroidFile(base,icon);
+
+            out.add(new CatalogManager.AppEntry(nextId++,name,"FDROID|"+base+"|"+apk,"F-Droid",desc,icon));
+        }
+        r.endObject();
     }
 
     private String resolveFdroidFile(String base,String file){
@@ -191,25 +250,21 @@ public final class SourceManager {
     public static String normalizeGitHub(String s){
         if(s==null)return "";
         s=s.trim();
-        s=s.replace("https://www.github.com/","")
-           .replace("http://www.github.com/","")
-           .replace("https://github.com/","")
-           .replace("http://github.com/","");
+        s=s.replace("https://www.github.com/","").replace("http://www.github.com/","")
+           .replace("https://github.com/","").replace("http://github.com/","");
         int q=s.indexOf('?');if(q>=0)s=s.substring(0,q);
         int h=s.indexOf('#');if(h>=0)s=s.substring(0,h);
         if(s.startsWith("github.com/"))s=s.substring(11);
         while(s.endsWith("/"))s=s.substring(0,s.length()-1);
         if(s.endsWith(".git"))s=s.substring(0,s.length()-4);
         String[] parts=s.split("/");
-        if(parts.length>=3&&("releases".equalsIgnoreCase(parts[2])||
-                "tree".equalsIgnoreCase(parts[2])||
-                "blob".equalsIgnoreCase(parts[2])))
+        if(parts.length>=3&&("releases".equalsIgnoreCase(parts[2])||"tree".equalsIgnoreCase(parts[2])||"blob".equalsIgnoreCase(parts[2])))
             s=parts[0]+"/"+parts[1];
         return s;
     }
 
     public static String normalizeFdroid(String s){
-        if(s==null||s.trim().isEmpty()) return OFFICIAL_FDROID;
+        if(s==null||s.trim().isEmpty())return OFFICIAL_FDROID;
         s=s.trim();
         while(s.endsWith("index-v1.json")||s.endsWith("index-v2.json"))
             s=s.substring(0,s.lastIndexOf("index-v"));
@@ -218,14 +273,12 @@ public final class SourceManager {
     }
 
     private String indexUrl(String base){
-        if(base.endsWith("index-v1.json")||base.endsWith("index-v2.json")) return base;
         return base+"index-v1.json";
     }
 
     private String get(String address)throws Exception{
         HttpURLConnection c=(HttpURLConnection)new URL(address).openConnection();
-        c.setConnectTimeout(20000);
-        c.setReadTimeout(60000);
+        c.setConnectTimeout(20000);c.setReadTimeout(60000);
         c.setRequestProperty("User-Agent","New-KDroid/1.1.0");
         c.setRequestProperty("Accept","application/json");
         try{
