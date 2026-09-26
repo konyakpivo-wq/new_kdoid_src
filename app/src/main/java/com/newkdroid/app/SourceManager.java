@@ -25,7 +25,7 @@ public final class SourceManager {
     }
 
     public void addGitHub(String url,String name,String description) {
-        add(GITHUB,url,name,description);
+        add(GITHUB,normalizeGitHub(url),name,description);
     }
     public void addFdroid(String url,String name) {
         add(FDS,normalizeFdroid(url),name,"Сторонний F-Droid репозиторий");
@@ -150,6 +150,11 @@ public final class SourceManager {
         if(s.startsWith("github.com/"))s=s.substring(11);
         while(s.endsWith("/"))s=s.substring(0,s.length()-1);
         if(s.endsWith(".git"))s=s.substring(0,s.length()-4);
+        String[] parts=s.split("/");
+        if(parts.length>=3){
+            if("releases".equalsIgnoreCase(parts[2]))s=parts[0]+"/"+parts[1];
+            else if("tree".equalsIgnoreCase(parts[2])||"blob".equalsIgnoreCase(parts[2]))s=parts[0]+"/"+parts[1];
+        }
         return s;
     }
 
@@ -169,7 +174,8 @@ public final class SourceManager {
     private String get(String address)throws Exception{
         HttpURLConnection c=(HttpURLConnection)new URL(address).openConnection();
         c.setConnectTimeout(12000);c.setReadTimeout(20000);
-        c.setRequestProperty("User-Agent","New-KDroid/1.0.0");
+        c.setRequestProperty("User-Agent","New-KDroid/1.1.0");
+        c.setRequestProperty("Accept","application/json");
         try{
             int code=c.getResponseCode();
             InputStream in=code>=200&&code<300?c.getInputStream():c.getErrorStream();
