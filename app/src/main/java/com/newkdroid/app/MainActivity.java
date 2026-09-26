@@ -323,11 +323,17 @@ public class MainActivity extends Activity {
     }
 
     private void chooseObtainiumJson(){
+        toast("Выбери JSON-файл Obtainium");
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
         i.setType("*/*");
         i.addCategory(Intent.CATEGORY_OPENABLE);
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-        startActivityForResult(i,OBTAINIUM_JSON_REQUEST);
+        try{startActivityForResult(i,OBTAINIUM_JSON_REQUEST);}catch(Exception e){
+            i=new Intent(Intent.ACTION_GET_CONTENT);
+            i.setType("*/*");
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            startActivityForResult(i,OBTAINIUM_JSON_REQUEST);
+        }
     }
 
     private String readUriText(Uri uri)throws Exception{
@@ -392,11 +398,15 @@ public class MainActivity extends Activity {
                 String desc=obtainiumDescription(a);
                 if(url.contains("github.com/")){sources.addGitHub(url,name,desc);added++;}
             }
-            if(added>0)loadCatalog(true);else toast("В JSON не найдено поддерживаемых GitHub приложений");
+            if(added>0){
+                toast("Импортировано: "+added);
+                loadCatalog(true);
+            }else toast("В JSON не найдено поддерживаемых GitHub приложений");
         }catch(Exception e){toast("Ошибка импорта JSON: "+e.getMessage());}
     }
 
     private void chooseNkdFolder(){
+        toast("Выбери папку, где лежат файлы .repo");
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION|Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
         startActivityForResult(i,NKD_FOLDER_REQUEST);
@@ -405,7 +415,11 @@ public class MainActivity extends Activity {
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
         if(resultCode==RESULT_OK&&data!=null&&data.getData()!=null){
-            if(requestCode==NKD_FOLDER_REQUEST){manager.saveStorageAccess(data.getData());toast("Папка NKD подключена");loadCatalog(true);}
+            if(requestCode==NKD_FOLDER_REQUEST){
+                manager.saveStorageAccess(data.getData());
+                toast("Папка NKD подключена. Ищу .repo…");
+                loadCatalog(true);
+            }
             else if(requestCode==OBTAINIUM_JSON_REQUEST)importObtainiumJson(data.getData());
         }
     }
