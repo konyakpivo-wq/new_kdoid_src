@@ -12,10 +12,7 @@ import android.view.View;
 import android.widget.*;
 import android.text.*;
 import androidx.core.content.FileProvider;
-import java.io.File;
-import java.io.InputStream;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -190,7 +187,7 @@ public class MainActivity extends Activity {
 
     private void chooseRelease(CatalogManager.AppEntry a){
         if(a.repository.startsWith("FDROID|")){
-            String[] p=a.repository.split("\|",3);
+            String[] p=a.repository.split("\\|",3);
             if(p.length==3) downloadFdroid(p[1],p[2],a.name);
             else toast("Некорректный F-Droid источник");
             return;
@@ -357,37 +354,26 @@ public class MainActivity extends Activity {
 
     private String obtainiumDescription(JSONObject a){
         Object raw=a.opt("additionalSettings");
-        if(raw instanceof JSONObject){
-            return ((JSONObject)raw).optString("about","");
-        }
+        if(raw instanceof JSONObject)return ((JSONObject)raw).optString("about","");
         if(raw instanceof String){
             String s=((String)raw).trim();
-            if(!s.isEmpty()){
-                try{return new JSONObject(s).optString("about","");}catch(Exception ignored){}
-            }
+            if(!s.isEmpty())try{return new JSONObject(s).optString("about","");}catch(Exception ignored){}
         }
         return a.optString("description","");
     }
 
     private void importObtainiumJson(Uri uri){
         try{
-            String text=readUriText(uri);
-            JSONArray apps=obtainiumApps(text);
+            JSONArray apps=obtainiumApps(readUriText(uri));
             int added=0;
             for(int i=0;i<apps.length();i++){
                 JSONObject a=apps.optJSONObject(i);if(a==null)continue;
-                String url=a.optString("url","").trim();
-                if(url.isEmpty())continue;
-                String name=a.optString("name","").trim();
+                String url=a.optString("url","").trim();if(url.isEmpty())continue;
+                String name=a.optString("name","").trim();if(name.isEmpty())name=url;
                 String desc=obtainiumDescription(a);
-                if(name.isEmpty())name=url;
-                if(url.contains("github.com/")){
-                    sources.addGitHub(url,name,desc);
-                    added++;
-                }
+                if(url.contains("github.com/")){sources.addGitHub(url,name,desc);added++;}
             }
-            if(added>0)loadCatalog(true);
-            else toast("В JSON не найдено поддерживаемых GitHub приложений");
+            if(added>0)loadCatalog(true);else toast("В JSON не найдено поддерживаемых GitHub приложений");
         }catch(Exception e){toast("Ошибка импорта JSON: "+e.getMessage());}
     }
 
@@ -400,13 +386,8 @@ public class MainActivity extends Activity {
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
         if(resultCode==RESULT_OK&&data!=null&&data.getData()!=null){
-            if(requestCode==NKD_FOLDER_REQUEST){
-                manager.saveStorageAccess(data.getData());
-                toast("Папка NKD подключена");
-                loadCatalog(true);
-            }else if(requestCode==OBTAINIUM_JSON_REQUEST){
-                importObtainiumJson(data.getData());
-            }
+            if(requestCode==NKD_FOLDER_REQUEST){manager.saveStorageAccess(data.getData());toast("Папка NKD подключена");loadCatalog(true);}
+            else if(requestCode==OBTAINIUM_JSON_REQUEST)importObtainiumJson(data.getData());
         }
     }
 
