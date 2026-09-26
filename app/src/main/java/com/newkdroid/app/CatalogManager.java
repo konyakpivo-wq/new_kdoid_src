@@ -25,90 +25,321 @@ public final class CatalogManager {
     private final Context context;
     public CatalogManager(Context context){this.context=context.getApplicationContext();}
 
-    public static final class AppEntry { public final int id; public final String name, repository, category, description, iconUrl; public AppEntry(int id,String n,String r,String c,String d){this(id,n,r,c,d,"");} public AppEntry(int id,String n,String r,String c,String d,String icon){this.id=id;name=n;repository=r;category=c;description=d;iconUrl=icon==null?"":icon;} }
-    public static final class AssetEntry { public final String name, downloadUrl; public AssetEntry(String n,String u){name=n;downloadUrl=u;} }
-    public static final class ReleaseEntry { public final String tag,name,htmlUrl,publishedAt; public final boolean prerelease; public final List<AssetEntry> assets; public ReleaseEntry(String t,String n,String h,String p,boolean pre,List<AssetEntry>a){tag=t;name=n;htmlUrl=h;publishedAt=p;prerelease=pre;assets=a;} @Override public String toString(){return(name==null||name.isEmpty())?tag:name+" ("+tag+")";} }
-
-    public boolean hasStorageAccess(){return context.getSharedPreferences(PREFS,0).getString(TREE_URI,null)!=null;}
-    public Intent createStorageAccessIntent(){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION|Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);return i;}
-    public void saveStorageAccess(Uri uri){try{context.getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}context.getSharedPreferences(PREFS,0).edit().putString(TREE_URI,uri.toString()).apply();}
-
-    public void loadCatalog(Callback callback){executor.execute(()->{try{
-        List<AppEntry> apps=new ArrayList<>();
-        Set<Integer> usedIds=new HashSet<>();
-
-        try{
-            String listing=get(APPREPO_API);
-            JSONArray files=new JSONArray(listing);
-            SortedSet<Integer>ids=new TreeSet<>();
-            Set<String>names=new HashSet<>();
-            for(int i=0;i<files.length();i++){
-                JSONObject f=files.getJSONObject(i);
-                String n=f.optString("name","");
-                names.add(n);
-                if(n.matches("\\d+\\.repo"))ids.add(Integer.parseInt(n.substring(0,n.length()-5)));
-                else if(n.matches("\\d+_repo\\.txt"))ids.add(Integer.parseInt(n.substring(0,n.length()-9)));
-            }
-            for(Integer id:ids)try{
-                RepoData d;
-                if(names.contains(id+".repo"))d=parseRepo(get(rawUrl(id+".repo")),id);
-                else d=parseLegacy(id,names);
-                if(d!=null&&!d.repository.isEmpty()){apps.add(new AppEntry(id,d.name,d.repository,d.category,d.description,d.icon));usedIds.add(id);}
-            }catch(Exception ignored){}
-        }catch(Exception ignored){}
-
-        for(AppEntry local:loadLocalNkd()){
-            if(usedIds.contains(local.id)){
-                int newId=1000000+local.id;
-                apps.add(new AppEntry(newId,local.name,local.repository,local.category,local.description,local.iconUrl));
-            }else{
-                apps.add(local);
-                usedIds.add(local.id);
-            }
+    public static final class AppEntry {
+        public final int id;
+        public final String name, repository, category, description, iconUrl;
+        public AppEntry(int id,String n,String r,String c,String d){this(id,n,r,c,d,"");}
+        public AppEntry(int id,String n,String r,String c,String d,String icon){
+            this.id=id;name=n;repository=r;category=c;description=d;iconUrl=icon==null?"":icon;
         }
+    }
+    public static final class AssetEntry { public final String name, downloadUrl; public AssetEntry(String n,String u){name=n;downloadUrl=u;} }
+    public static final class ReleaseEntry {
+        public final String tag,name,htmlUrl,publishedAt;
+        public final boolean prerelease;
+        public final List<AssetEntry> assets;
+        public ReleaseEntry(String t,String n,String h,String p,boolean pre,List<AssetEntry>a){
+            tag=t;name=n;htmlUrl=h;publishedAt=p;prerelease=pre;assets=a;
+        }
+        @Override public String toString(){return(name==null||name.isEmpty())?tag:name+" ("+tag+")";}
+    }
 
-        callback.onSuccess(apps,apps.size());
-    }catch(Exception e){callback.onError(e);}});}
+    public boolean hasStorageAccess(){
+        return context.getSharedPreferences(PREFS,0).getString(TREE_URI,null)!=null;
+    }
 
-    private List<AppEntry> loadLocalNkd(){
+    public Intent createStorageAccessIntent(){
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|
+                   Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION|
+                   Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+        return i;
+    }
+
+    public void saveStorageAccess(Uri uri){
+        if(uri==null)return;
+        try{
+            int flags=Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
+            context.getContentResolver().takePersistableUriPermission(uri,flags);
+        }catch(Exception ignored){
+            try{
+                context.getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            }catch(Exception ignored2){}
+        }
+        context.getSharedPreferences(PREFS,0).edit().putString(TREE_URI,uri.toString()).apply();
+    }
+
+    public void loadCatalog(Callback callback){
+        executor.execute(()->{
+            try{
+                List<AppEntry> apps=new ArrayList<>();
+                Set<Integer> usedIds=new HashSet<>();
+
+                try{
+                    String listing=get(APPREPO_API);
+                    JSONArray files=new JSONArray(listing);
+                    SortedSet<Integer>ids=new TreeSet<>();
+                    Set<String>names=new HashSet<>();
+
+                    for(int i=0;i<files.length();i++){
+                        JSONObject f=files.getJSONObject(i);
+                        String n=f.optString("name","");
+                        names.add(n);
+                        if(n.matches("\\d+\\.repo"))
+                            ids.add(Integer.parseInt(n.substring(0,n.length()-5)));
+                        else if(n.matches("\\d+_repo\\.txt"))
+                            ids.add(Integer.parseInt(n.substring(0,n.length()-9)));
+                    }
+
+                    for(Integer id:ids)try{
+                        RepoData d;
+                        if(names.contains(id+".repo"))d=parseRepo(get(rawUrl(id+".repo")),id);
+                        else d=parseLegacy(id,names);
+                        if(d!=null&&!d.repository.isEmpty()){
+                            apps.add(new AppEntry(id,d.name,d.repository,d.category,d.description,d.icon));
+                            usedIds.add(id);
+                        }
+                    }catch(Exception ignored){}
+                }catch(Exception ignored){}
+
+                for(AppEntry local:loadLocalNkd(usedIds)){
+                    apps.add(local);
+                    usedIds.add(local.id);
+                }
+
+                callback.onSuccess(apps,apps.size());
+            }catch(Exception e){callback.onError(e);}
+        });
+    }
+
+    private List<AppEntry> loadLocalNkd(Set<Integer> usedIds){
         List<AppEntry>out=new ArrayList<>();
         String s=context.getSharedPreferences(PREFS,0).getString(TREE_URI,null);
         if(s==null)return out;
+
         try{
             DocumentFile dir=DocumentFile.fromTreeUri(context,Uri.parse(s));
             if(dir==null||!dir.isDirectory())return out;
-            scanNkdDirectory(dir,out);
+            scanNkdDirectory(dir,out,usedIds);
         }catch(Exception ignored){}
         return out;
     }
 
-    private void scanNkdDirectory(DocumentFile dir,List<AppEntry>out){
-        for(DocumentFile f:dir.listFiles()){
+    private void scanNkdDirectory(DocumentFile dir,List<AppEntry>out,Set<Integer>usedIds){
+        DocumentFile[] files;
+        try{files=dir.listFiles();}catch(Exception e){return;}
+
+        int generatedId=1000000+out.size();
+        for(DocumentFile f:files){
             String n=f.getName();
+
             if(f.isDirectory()){
-                scanNkdDirectory(f,out);
+                scanNkdDirectory(f,out,usedIds);
                 continue;
             }
-            if(n==null||!n.matches("\\d+\\.repo"))continue;
+            if(n==null||!n.toLowerCase(Locale.ROOT).endsWith(".repo"))continue;
+
             try(InputStream in=context.getContentResolver().openInputStream(f.getUri())){
                 if(in==null)continue;
-                RepoData d=parseRepo(read(in),Integer.parseInt(n.substring(0,n.length()-5)));
-                if(d!=null&&!d.repository.isEmpty())
-                    out.add(new AppEntry(Integer.parseInt(n.substring(0,n.length()-5)),d.name,d.repository,d.category,d.description,d.icon));
+
+                int id=parseRepoId(n,generatedId++);
+                while(usedIds.contains(id))id++;
+
+                RepoData d=parseRepo(read(in),id);
+                if(d!=null&&!d.repository.isEmpty()){
+                    out.add(new AppEntry(id,d.name,d.repository,d.category,d.description,d.icon));
+                    usedIds.add(id);
+                }
             }catch(Exception ignored){}
         }
     }
 
-    private String read(InputStream in)throws Exception{BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8));StringBuilder b=new StringBuilder();String l;while((l=r.readLine())!=null)b.append(l).append('\n');return b.toString();}
-    private String rawUrl(String file){return "https://raw.githubusercontent.com/konyakpivo-wq/new_kdoid/main/apprepo/"+file;}
-    private static final class RepoData{String repository,name,description,category,icon;RepoData(String r,String n,String d,String c){this(r,n,d,c,"");}RepoData(String r,String n,String d,String c,String i){repository=r;name=n;description=d;category=c;icon=i;}}
-    private RepoData parseLegacy(int id,Set<String>names)throws Exception{String rt=get(rawUrl(id+"_repo.txt"));String deca=names.contains(id+"_deca.txt")?get(rawUrl(id+"_deca.txt")):"";String repository="",icon="";for(String raw:rt.replace("\r","").split("\n")){String line=raw.trim();if(line.startsWith("repo:"))repository=line.substring(5).trim();else if(repository.isEmpty()&&!line.isEmpty())repository=line;}repository=repositoryFromUrl(repository);String name=repositoryName(repository),description="",category="Другое",cid="";for(String raw:deca.replace("\r","").split("\n")){String line=raw.trim();if(line.startsWith("d:"))description=line.substring(2).trim();else if(line.startsWith("cid:"))cid=line.substring(4).trim();else if(line.startsWith("name:"))name=line.substring(5).trim();else if(line.startsWith("category:"))category=line.substring(9).trim();else if(line.startsWith("icon:"))icon=line.substring(5).trim();}if(!cid.isEmpty())category=categoryName(cid);return repository.isEmpty()?null:new RepoData(repository,name,description,category,icon);}
-    private RepoData parseRepo(String text,int expectedId){String[]lines=text.replace("\r","").split("\n");ArrayList<String>plain=new ArrayList<>();String repository="",name="",description="",category="",icon="";for(String raw:lines){String line=raw.trim();if(line.isEmpty()||line.startsWith("#"))continue;if(line.startsWith("repo:"))repository=line.substring(5).trim();else if(line.startsWith("name:"))name=line.substring(5).trim();else if(line.startsWith("d:"))description=line.substring(2).trim();else if(line.startsWith("category:"))category=line.substring(9).trim();else if(line.startsWith("cid:"))category=categoryName(line.substring(4).trim());else if(line.startsWith("icon:"))icon=line.substring(5).trim();else if(line.startsWith("id:")){}else plain.add(line);}if(repository.isEmpty()&&plain.size()>0)repository=plain.get(0);if(name.isEmpty()&&plain.size()>1)name=plain.get(1);if(description.isEmpty()&&plain.size()>2)description=plain.get(2);if(category.isEmpty()&&plain.size()>3)category=plain.get(3);repository=repositoryFromUrl(repository);if(name.isEmpty())name=repositoryName(repository);if(category.isEmpty())category="Другое";return repository.isEmpty()?null:new RepoData(repository,name,description,category,icon);}
-    private String categoryName(String cid){if("1".equals(cid))return"Системные";if("2".equals(cid))return"Приложения";if("3".equals(cid))return"Утилиты";return cid.isEmpty()?"Другое":"Категория "+cid;}
-    private String repositoryName(String repository){String s=repository==null?"":repository.trim();int slash=s.lastIndexOf('/');String n=slash>=0?s.substring(slash+1):s;return n.isEmpty()?"Приложение":n;}
-    private String repositoryFromUrl(String url){String s=url==null?"":url.trim();s=s.replaceFirst("\\s*\\(id:\\s*\\d+\\)\\s*$","").trim();if(s.endsWith("/"))s=s.substring(0,s.length()-1);if(s.endsWith(".git"))s=s.substring(0,s.length()-4);int x=s.indexOf("github.com/");return x>=0?s.substring(x+11):s;}
-    public void loadReleases(String repository,ReleasesCallback callback){executor.execute(()->{try{JSONArray a=new JSONArray(get("https://api.github.com/repos/"+repository+"/releases?per_page=10"));List<ReleaseEntry>out=new ArrayList<>();for(int i=0;i<a.length();i++){JSONObject o=a.getJSONObject(i);if(o.optBoolean("draft",false))continue;List<AssetEntry>assets=new ArrayList<>();JSONArray aa=o.optJSONArray("assets");if(aa!=null)for(int j=0;j<aa.length();j++){JSONObject z=aa.getJSONObject(j);String download=z.optString("browser_download_url","");if(!download.isEmpty())assets.add(new AssetEntry(z.optString("name"),download));}out.add(new ReleaseEntry(o.optString("tag_name"),o.optString("name"),o.optString("html_url"),o.optString("published_at"),o.optBoolean("prerelease",false),assets));}callback.onSuccess(out);}catch(Exception e){callback.onError(e);}});}
-    public static AssetEntry chooseApk(ReleaseEntry r){List<AssetEntry>good=new ArrayList<>();for(AssetEntry a:r.assets){String n=a.name.toLowerCase(Locale.ROOT);if(!n.endsWith(".apk")||n.contains("src")||n.contains("source")||n.contains("debug")||n.contains("test"))continue;good.add(a);}if(good.isEmpty())return null;String arch=android.os.Build.SUPPORTED_ABIS.length>0?android.os.Build.SUPPORTED_ABIS[0]:"";for(AssetEntry a:good){String n=a.name.toLowerCase(Locale.ROOT);if((arch.contains("arm64")&&n.contains("arm64"))||(arch.contains("armeabi")&&n.contains("armeabi"))||(arch.contains("x86_64")&&n.contains("x86_64"))||(arch.equals("x86")&&n.contains("x86")))return a;}for(AssetEntry a:good)if(a.name.toLowerCase(Locale.ROOT).contains("universal"))return a;return good.get(0);}
-    public void downloadApk(String url,File target,DownloadCallback cb){executor.execute(()->{HttpURLConnection c=null;try{c=(HttpURLConnection)new URL(url).openConnection();c.setInstanceFollowRedirects(true);c.setConnectTimeout(15000);c.setReadTimeout(30000);c.setRequestProperty("User-Agent","New-KDroid/1.1.0");int code=c.getResponseCode();if(code<200||code>=300)throw new IOException("HTTP "+code);long total=c.getContentLengthLong();try(InputStream in=new BufferedInputStream(c.getInputStream());OutputStream out=new BufferedOutputStream(new FileOutputStream(target))){byte[]buf=new byte[8192];long done=0;int len;while((len=in.read(buf))!=-1){out.write(buf,0,len);done+=len;if(total>0)cb.onProgress((int)(done*100/total));}}cb.onProgress(100);cb.onSuccess(target);}catch(Exception e){if(target.exists())target.delete();cb.onError(e);}finally{if(c!=null)c.disconnect();}});}
-    private String get(String address)throws Exception{HttpURLConnection c=(HttpURLConnection)new URL(address).openConnection();c.setRequestMethod("GET");c.setConnectTimeout(10000);c.setReadTimeout(15000);c.setRequestProperty("Accept","application/json, text/plain");c.setRequestProperty("User-Agent","New-KDroid/1.1.0");try{int code=c.getResponseCode();InputStream s=code>=200&&code<300?c.getInputStream():c.getErrorStream();if(s==null)throw new IOException("HTTP "+code);String b=read(s);if(code<200||code>=300)throw new IOException("HTTP "+code);return b;}finally{c.disconnect();}}
+    private int parseRepoId(String name,int fallback){
+        String base=name.substring(0,name.length()-5);
+        try{return Integer.parseInt(base);}catch(Exception ignored){}
+        return fallback;
+    }
+
+    private String read(InputStream in)throws Exception{
+        BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8));
+        StringBuilder b=new StringBuilder();String l;
+        while((l=r.readLine())!=null)b.append(l).append('\n');
+        return b.toString();
+    }
+
+    private String rawUrl(String file){
+        return "https://raw.githubusercontent.com/konyakpivo-wq/new_kdoid/main/apprepo/"+file;
+    }
+
+    private static final class RepoData{
+        String repository,name,description,category,icon;
+        RepoData(String r,String n,String d,String c){this(r,n,d,c,"");}
+        RepoData(String r,String n,String d,String c,String i){
+            repository=r;name=n;description=d;category=c;icon=i;
+        }
+    }
+
+    private RepoData parseLegacy(int id,Set<String>names)throws Exception{
+        String rt=get(rawUrl(id+"_repo.txt"));
+        String deca=names.contains(id+"_deca.txt")?get(rawUrl(id+"_deca.txt")):"";
+        String repository="",icon="";
+        for(String raw:rt.replace("\r","").split("\n")){
+            String line=raw.trim();
+            if(line.startsWith("repo:"))repository=line.substring(5).trim();
+            else if(repository.isEmpty()&&!line.isEmpty())repository=line;
+        }
+        repository=repositoryFromUrl(repository);
+        String name=repositoryName(repository),description="",category="Другое",cid="";
+        for(String raw:deca.replace("\r","").split("\n")){
+            String line=raw.trim();
+            if(line.startsWith("d:"))description=line.substring(2).trim();
+            else if(line.startsWith("cid:"))cid=line.substring(4).trim();
+            else if(line.startsWith("name:"))name=line.substring(5).trim();
+            else if(line.startsWith("category:"))category=line.substring(9).trim();
+            else if(line.startsWith("icon:"))icon=line.substring(5).trim();
+        }
+        if(!cid.isEmpty())category=categoryName(cid);
+        return repository.isEmpty()?null:new RepoData(repository,name,description,category,icon);
+    }
+
+    private RepoData parseRepo(String text,int expectedId){
+        String[]lines=text.replace("\r","").split("\n");
+        ArrayList<String>plain=new ArrayList<>();
+        String repository="",name="",description="",category="",icon="";
+        for(String raw:lines){
+            String line=raw.trim();
+            if(line.isEmpty()||line.startsWith("#"))continue;
+            if(line.startsWith("repo:"))repository=line.substring(5).trim();
+            else if(line.startsWith("name:"))name=line.substring(5).trim();
+            else if(line.startsWith("d:"))description=line.substring(2).trim();
+            else if(line.startsWith("category:"))category=line.substring(9).trim();
+            else if(line.startsWith("cid:"))category=categoryName(line.substring(4).trim());
+            else if(line.startsWith("icon:"))icon=line.substring(5).trim();
+            else if(line.startsWith("id:")){}
+            else plain.add(line);
+        }
+        if(repository.isEmpty()&&plain.size()>0)repository=plain.get(0);
+        if(name.isEmpty()&&plain.size()>1)name=plain.get(1);
+        if(description.isEmpty()&&plain.size()>2)description=plain.get(2);
+        if(category.isEmpty()&&plain.size()>3)category=plain.get(3);
+        repository=repositoryFromUrl(repository);
+        if(name.isEmpty())name=repositoryName(repository);
+        if(category.isEmpty())category="Другое";
+        return repository.isEmpty()?null:new RepoData(repository,name,description,category,icon);
+    }
+
+    private String categoryName(String cid){
+        if("1".equals(cid))return"Системные";
+        if("2".equals(cid))return"Приложения";
+        if("3".equals(cid))return"Утилиты";
+        return cid.isEmpty()?"Другое":"Категория "+cid;
+    }
+
+    private String repositoryName(String repository){
+        String s=repository==null?"":repository.trim();
+        int slash=s.lastIndexOf('/');
+        String n=slash>=0?s.substring(slash+1):s;
+        return n.isEmpty()?"Приложение":n;
+    }
+
+    private String repositoryFromUrl(String url){
+        String s=url==null?"":url.trim();
+        s=s.replaceFirst("\\s*\\(id:\\s*\\d+\\)\\s*$","").trim();
+        if(s.endsWith("/"))s=s.substring(0,s.length()-1);
+        if(s.endsWith(".git"))s=s.substring(0,s.length()-4);
+        int x=s.indexOf("github.com/");
+        return x>=0?s.substring(x+11):s;
+    }
+
+    public void loadReleases(String repository,ReleasesCallback callback){
+        executor.execute(()->{
+            try{
+                JSONArray a=new JSONArray(get("https://api.github.com/repos/"+repository+"/releases?per_page=10"));
+                List<ReleaseEntry>out=new ArrayList<>();
+                for(int i=0;i<a.length();i++){
+                    JSONObject o=a.getJSONObject(i);
+                    if(o.optBoolean("draft",false))continue;
+                    List<AssetEntry>assets=new ArrayList<>();
+                    JSONArray aa=o.optJSONArray("assets");
+                    if(aa!=null)for(int j=0;j<aa.length();j++){
+                        JSONObject z=aa.getJSONObject(j);
+                        String download=z.optString("browser_download_url","");
+                        if(!download.isEmpty())assets.add(new AssetEntry(z.optString("name"),download));
+                    }
+                    out.add(new ReleaseEntry(o.optString("tag_name"),o.optString("name"),
+                        o.optString("html_url"),o.optString("published_at"),
+                        o.optBoolean("prerelease",false),assets));
+                }
+                callback.onSuccess(out);
+            }catch(Exception e){callback.onError(e);}
+        });
+    }
+
+    public static AssetEntry chooseApk(ReleaseEntry r){
+        List<AssetEntry>good=new ArrayList<>();
+        for(AssetEntry a:r.assets){
+            String n=a.name.toLowerCase(Locale.ROOT);
+            if(!n.endsWith(".apk")||n.contains("src")||n.contains("source")||
+               n.contains("debug")||n.contains("test"))continue;
+            good.add(a);
+        }
+        if(good.isEmpty())return null;
+
+        String arch=android.os.Build.SUPPORTED_ABIS.length>0?android.os.Build.SUPPORTED_ABIS[0]:"";
+        for(AssetEntry a:good){
+            String n=a.name.toLowerCase(Locale.ROOT);
+            if((arch.contains("arm64")&&n.contains("arm64"))||
+               (arch.contains("armeabi")&&n.contains("armeabi"))||
+               (arch.contains("x86_64")&&n.contains("x86_64"))||
+               (arch.equals("x86")&&n.contains("x86")))return a;
+        }
+        for(AssetEntry a:good)
+            if(a.name.toLowerCase(Locale.ROOT).contains("universal"))return a;
+        return good.get(0);
+    }
+
+    public void downloadApk(String url,File target,DownloadCallback cb){
+        executor.execute(()->{
+            HttpURLConnection c=null;
+            try{
+                c=(HttpURLConnection)new URL(url).openConnection();
+                c.setInstanceFollowRedirects(true);
+                c.setConnectTimeout(15000);
+                c.setReadTimeout(30000);
+                c.setRequestProperty("User-Agent","New-KDroid/1.1.0");
+                int code=c.getResponseCode();
+                if(code<200||code>=300)throw new IOException("HTTP "+code);
+                long total=c.getContentLengthLong();
+                try(InputStream in=new BufferedInputStream(c.getInputStream());
+                    OutputStream out=new BufferedOutputStream(new FileOutputStream(target))){
+                    byte[]buf=new byte[8192];long done=0;int len;
+                    while((len=in.read(buf))!=-1){
+                        out.write(buf,0,len);done+=len;
+                        if(total>0)cb.onProgress((int)(done*100/total));
+                    }
+                }
+                cb.onProgress(100);cb.onSuccess(target);
+            }catch(Exception e){
+                if(target.exists())target.delete();
+                cb.onError(e);
+            }finally{if(c!=null)c.disconnect();}
+        });
+    }
+
+    private String get(String address)throws Exception{
+        HttpURLConnection c=(HttpURLConnection)new URL(address).openConnection();
+        c.setRequestMethod("GET");
+        c.setConnectTimeout(10000);
+        c.setReadTimeout(15000);
+        c.setRequestProperty("Accept","application/json, text/plain");
+        c.setRequestProperty("User-Agent","New-KDroid/1.1.0");
+        try{
+            int code=c.getResponseCode();
+            InputStream s=code>=200&&code<300?c.getInputStream():c.getErrorStream();
+            if(s==null)throw new IOException("HTTP "+code);
+            String b=read(s);
+            if(code<200||code>=300)throw new IOException("HTTP "+code);
+            return b;
+        }finally{c.disconnect();}
+    }
 }
