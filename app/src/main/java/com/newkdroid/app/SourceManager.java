@@ -11,6 +11,7 @@ import java.util.concurrent.*;
 
 public final class SourceManager {
     public static final String FDROID = "F-Droid";
+    private static final String OFFICIAL_FDROID = "https://f-droid.org/repo/";
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private static final String PREFS = "nkd_sources";
@@ -27,6 +28,7 @@ public final class SourceManager {
     public void addGitHub(String url,String name,String description) {
         add(GITHUB,normalizeGitHub(url),name,description);
     }
+
     public void addFdroid(String url,String name) {
         add(FDS,normalizeFdroid(url),name,"Сторонний F-Droid репозиторий");
     }
@@ -40,13 +42,22 @@ public final class SourceManager {
 
     public List<Source> getSources() {
         List<Source> out=new ArrayList<>();
-        for(String type:new String[]{GITHUB,FDS}) {
-            JSONArray a=readSources(type);
-            for(int i=0;i<a.length();i++) try {
-                JSONObject o=a.getJSONObject(i);
-                out.add(new Source(type,o.optString("url"),o.optString("name"),o.optString("description")));
-            } catch(Exception ignored){}
-        }
+        boolean official=false;
+        JSONArray fd=readSources(FDS);
+        for(int i=0;i<fd.length();i++) try {
+            JSONObject o=fd.getJSONObject(i);
+            String url=normalizeFdroid(o.optString("url"));
+            if(OFFICIAL_FDROID.equals(url))official=true;
+            out.add(new Source(FDS,url,o.optString("name"),o.optString("description")));
+        } catch(Exception ignored){}
+
+        if(!official) out.add(0,new Source(FDS,OFFICIAL_FDROID,"F-Droid","Официальный репозиторий F-Droid"));
+
+        JSONArray gh=readSources(GITHUB);
+        for(int i=0;i<gh.length();i++) try {
+            JSONObject o=gh.getJSONObject(i);
+            out.add(new Source(GITHUB,normalizeGitHub(o.optString("url")),o.optString("name"),o.optString("description")));
+        } catch(Exception ignored){}
         return out;
     }
 
@@ -152,17 +163,17 @@ public final class SourceManager {
         if(s.endsWith(".git"))s=s.substring(0,s.length()-4);
         String[] parts=s.split("/");
         if(parts.length>=3){
-            if("releases".equalsIgnoreCase(parts[2]))s=parts[0]+"/"+parts[1];
-            else if("tree".equalsIgnoreCase(parts[2])||"blob".equalsIgnoreCase(parts[2]))s=parts[0]+"/"+parts[1];
+            if("releases".equalsIgnoreCase(parts[2])||"tree".equalsIgnoreCase(parts[2])||"blob".equalsIgnoreCase(parts[2]))
+                s=parts[0]+"/"+parts[1];
         }
         return s;
     }
 
     public static String normalizeFdroid(String s){
-        if(s==null||s.trim().isEmpty()) return "https://f-droid.org/repo/";
+        if(s==null||s.trim().isEmpty()) return OFFICIAL_FDROID;
         s=s.trim();
+        if(s.endsWith("index-v1.json"))s=s.substring(0,s.length()-"index-v1.json".length());
         if(!s.endsWith("/"))s+="/";
-        if(s.endsWith("index-v1.json/"))s=s.substring(0,s.length()-15);
         return s;
     }
 
