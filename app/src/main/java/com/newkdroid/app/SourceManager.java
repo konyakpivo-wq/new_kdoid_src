@@ -61,34 +61,13 @@ public final class SourceManager {
             try {
                 List<CatalogManager.AppEntry> out=new ArrayList<>();
                 int id=100000;
-                for(Source s:getSources()) {
-                    if(GITHUB.equals(s.type)) {
-                        String repo=normalizeGitHub(s.url);
+                for(Source source:getSources()) {
+                    if(GITHUB.equals(source.type)) {
+                        String repo=normalizeGitHub(source.url);
                         if(repo.isEmpty()) continue;
-                        out.add(new CatalogManager.AppEntry(id++,s.name.isEmpty()?repo:s.name,repo,"Сторонние",""+(s.description.isEmpty()?"GitHub":s.description),""));
-                    } else if(FDS.equals(s.type)) {
-                        String base=normalizeFdroid(s.url);
-                        String index=get(indexUrl(base));
-                        JSONObject root=new JSONObject(index);
-                        JSONObject apps=root.optJSONObject("packages");
-                        if(apps==null) continue;
-                        Iterator<String> keys=apps.keys();
-                        while(keys.hasNext()) {
-                            String pkg=keys.next();
-                            JSONObject app=apps.optJSONObject(pkg);
-                            if(app==null) continue;
-                            String name=app.optString("name",pkg);
-                            String desc=app.optString("summary",app.optString("description",""));
-                            String icon=app.optString("icon","");
-                            if(icon.startsWith("icon/")) icon=base+icon;
-                            else if(!icon.isEmpty()&&!icon.startsWith("http://")&&!icon.startsWith("https://")) icon=base+icon;
-                            JSONArray packages=app.optJSONArray("packages");
-                            if(packages==null||packages.length()==0) continue;
-                            JSONObject latest=packages.getJSONObject(packages.length()-1);
-                            String apk=latest.optString("apkname","");
-                            if(apk.isEmpty()) continue;
-                            out.add(new CatalogManager.AppEntry(id++,name,"FDROID|"+base+"|"+apk,"F-Droid",desc,icon));
-                        }
+                        loadGitHubApp(repo,source,id++,out);
+                    } else if(FDS.equals(source.type)) {
+                        id=loadFdroidApps(normalizeFdroid(source.url),id,out);
                     }
                 }
                 cb.done(out);
@@ -96,9 +75,79 @@ public final class SourceManager {
         });
     }
 
+    private void loadGitHubApp(String repo,Source source,int id,List<CatalogManager.AppEntry> out)throws Exception {
+        String[] p=repo.split("/",2);
+        if(p.length!=2)return;
+        JSONObject info=new JSONObject(get("https://api.github.com/repos/"+p[0]+"/"+p[1]));
+        String name=source.name.isEmpty()?info.optString("name",repo):source.name;
+        String desc=source.description.isEmpty()?info.optString("description","GitHub repository"):source.description;
+        JSONObject owner=info.optJSONObject("owner");
+        String icon=owner==null?"":owner.optString("avatar_url","");
+        out.add(new CatalogManager.AppEntry(id,name,repo,"Сторонние",desc,icon));
+    }
+
+    private int loadFdroidApps(String base,int id,List<CatalogManager.AppEntry> out)throws Exception {
+        JSONObject root=new JSONObject(get(indexUrl(base)));
+        JSONArray appList=root.optJSONArray("apps");
+        JSONObject packages=root.optJSONObject("packages");
+        if(packages==null)return id;
+
+        HashMap<String,JSONObject> metadata=new HashMap<>();
+        if(appList!=null)for(int i=0;i<appList.length();i++){
+            JSONObject a=appList.optJSONObject(i);
+            if(a!=null)metadata.put(a.optString("packageName",""),a);
+        }
+
+        Iterator<String> keys=packages.keys();
+        while(keys.hasNext()){
+            String pkg=keys.next();
+            JSONArray versions=packages.optJSONArray(pkg);
+            if(versions==null||versions.length()==0)continue;
+            JSONObject latest=versions.optJSONObject(0);
+            for(int i=1;i<versions.length();i++){
+                JSONObject v=versions.optJSONObject(i);
+                if(v!=null&&v.optLong("versionCode",0)>latest.optLong("versionCode",0))latest=v;
+            }
+            String apk=latest.optString("apkName",latest.optString("apkname",""));
+            if(apk.isEmpty())continue;
+
+            JSONObject meta=metadata.get(pkg);
+            String name=pkg,desc="",icon="";
+            if(meta!=null){
+                name=meta.optString("name",pkg);
+                desc=meta.optString("summary",meta.optString("description",""));
+                icon=meta.optString("icon","");
+                JSONObject localized=meta.optJSONObject("localized");
+                if(localized!=null){
+                    JSONObject en=localized.optJSONObject("en-US");
+                    if(en!=null){
+                        if(name.equals(pkg))name=en.optString("name",name);
+                        if(desc.isEmpty())desc=en.optString("summary",desc);
+                        if(icon.isEmpty())icon=en.optString("icon",icon);
+                    }
+                }
+            }
+            icon=resolveFdroidFile(base,icon);
+            out.add(new CatalogManager.AppEntry(id++,name,"FDROID|"+base+"|"+apk,"F-Droid",desc,icon));
+        }
+        return id;
+    }
+
+    private String resolveFdroidFile(String base,String file){
+        if(file==null||file.isEmpty())return "";
+        if(file.startsWith("http://")||file.startsWith("https://"))return file;
+        if(file.startsWith("/"))return base+file.substring(1);
+        return base+file;
+    }
+
     public static String normalizeGitHub(String s){
         if(s==null)return "";
-        s=s.trim().replace("https://github.com/","").replace("http://github.com/","");
+        s=s.trim();
+        s=s.replace("https://www.github.com/","").replace("http://www.github.com/","");
+        s=s.replace("https://github.com/","").replace("http://github.com/","");
+        int q=s.indexOf('?');if(q>=0)s=s.substring(0,q);
+        int h=s.indexOf('#');if(h>=0)s=s.substring(0,h);
+        if(s.startsWith("github.com/"))s=s.substring(11);
         while(s.endsWith("/"))s=s.substring(0,s.length()-1);
         if(s.endsWith(".git"))s=s.substring(0,s.length()-4);
         return s;
