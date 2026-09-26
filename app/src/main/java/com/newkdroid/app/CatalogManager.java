@@ -116,42 +116,32 @@ public final class CatalogManager {
         List<AppEntry>out=new ArrayList<>();
         String s=context.getSharedPreferences(PREFS,0).getString(TREE_URI,null);
         if(s==null)return out;
-
         try{
             DocumentFile dir=DocumentFile.fromTreeUri(context,Uri.parse(s));
             if(dir==null||!dir.isDirectory())return out;
-            scanNkdDirectory(dir,out,usedIds);
+
+            // Сканируем только выбранную папку. Рекурсивный обход всего Download
+            // мог приводить к зависанию/вылету на Android 15.
+            DocumentFile[] files=dir.listFiles();
+            int generatedId=1000000;
+            for(DocumentFile f:files){
+                if(f==null||f.isDirectory())continue;
+                String n=f.getName();
+                if(n==null||!n.toLowerCase(Locale.ROOT).endsWith(".repo"))continue;
+
+                try(InputStream in=context.getContentResolver().openInputStream(f.getUri())){
+                    if(in==null)continue;
+                    int id=parseRepoId(n,generatedId++);
+                    while(usedIds.contains(id))id++;
+                    RepoData d=parseRepo(read(in),id);
+                    if(d!=null&&!d.repository.isEmpty()){
+                        out.add(new AppEntry(id,d.name,d.repository,d.category,d.description,d.icon));
+                        usedIds.add(id);
+                    }
+                }catch(Exception ignored){}
+            }
         }catch(Exception ignored){}
         return out;
-    }
-
-    private void scanNkdDirectory(DocumentFile dir,List<AppEntry>out,Set<Integer>usedIds){
-        DocumentFile[] files;
-        try{files=dir.listFiles();}catch(Exception e){return;}
-
-        int generatedId=1000000+out.size();
-        for(DocumentFile f:files){
-            String n=f.getName();
-
-            if(f.isDirectory()){
-                scanNkdDirectory(f,out,usedIds);
-                continue;
-            }
-            if(n==null||!n.toLowerCase(Locale.ROOT).endsWith(".repo"))continue;
-
-            try(InputStream in=context.getContentResolver().openInputStream(f.getUri())){
-                if(in==null)continue;
-
-                int id=parseRepoId(n,generatedId++);
-                while(usedIds.contains(id))id++;
-
-                RepoData d=parseRepo(read(in),id);
-                if(d!=null&&!d.repository.isEmpty()){
-                    out.add(new AppEntry(id,d.name,d.repository,d.category,d.description,d.icon));
-                    usedIds.add(id);
-                }
-            }catch(Exception ignored){}
-        }
     }
 
     private int parseRepoId(String name,int fallback){
