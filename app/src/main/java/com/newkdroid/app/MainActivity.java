@@ -190,7 +190,7 @@ public class MainActivity extends Activity {
 
     private void chooseRelease(CatalogManager.AppEntry a){
         if(a.repository.startsWith("FDROID|")){
-            String[] p=a.repository.split("\\|",3);
+            String[] p=a.repository.split("\|",3);
             if(p.length==3) downloadFdroid(p[1],p[2],a.name);
             else toast("Некорректный F-Droid источник");
             return;
@@ -270,7 +270,7 @@ public class MainActivity extends Activity {
 
     private void showSettings(){
         LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(12,4,12,0);
-        TextView info=label("New KDroid 1.0.0\n\nИсточники: официальный F-Droid + добавленные тобой источники.",15,Color.LTGRAY);
+        TextView info=label("New KDroid 1.1.0\n\nИсточники: официальный F-Droid + добавленные тобой источники.",15,Color.LTGRAY);
         box.addView(info);
         addSettingButton(box,"＋ Добавить GitHub репозиторий",v->addGitHubDialog());
         addSettingButton(box,"＋ Добавить F-Droid репозиторий",v->addFdroidDialog());
@@ -327,28 +327,59 @@ public class MainActivity extends Activity {
 
     private void chooseObtainiumJson(){
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        i.setType("application/json");
+        i.setType("*/*");
         i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         startActivityForResult(i,OBTAINIUM_JSON_REQUEST);
     }
 
-    private void importObtainiumJson(Uri uri){
+    private String readUriText(Uri uri)throws Exception{
         try(InputStream in=getContentResolver().openInputStream(uri)){
+            if(in==null)throw new IOException("Файл недоступен");
             BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8));
             StringBuilder b=new StringBuilder();String line;
             while((line=r.readLine())!=null)b.append(line);
-            JSONObject root=new JSONObject(b.toString());
-            JSONArray apps=root.optJSONArray("apps");
-            if(apps==null){toast("В JSON нет массива apps");return;}
+            return b.toString().trim();
+        }
+    }
+
+    private JSONArray obtainiumApps(String text)throws Exception{
+        if(text==null||text.trim().isEmpty())throw new IOException("Пустой JSON");
+        String s=text.trim();
+        if(s.startsWith("["))return new JSONArray(s);
+        JSONObject root=new JSONObject(s);
+        JSONArray wrapped=root.optJSONArray("apps");
+        if(wrapped!=null)return wrapped;
+        JSONArray one=new JSONArray();
+        one.put(root);
+        return one;
+    }
+
+    private String obtainiumDescription(JSONObject a){
+        Object raw=a.opt("additionalSettings");
+        if(raw instanceof JSONObject){
+            return ((JSONObject)raw).optString("about","");
+        }
+        if(raw instanceof String){
+            String s=((String)raw).trim();
+            if(!s.isEmpty()){
+                try{return new JSONObject(s).optString("about","");}catch(Exception ignored){}
+            }
+        }
+        return a.optString("description","");
+    }
+
+    private void importObtainiumJson(Uri uri){
+        try{
+            String text=readUriText(uri);
+            JSONArray apps=obtainiumApps(text);
             int added=0;
             for(int i=0;i<apps.length();i++){
                 JSONObject a=apps.optJSONObject(i);if(a==null)continue;
                 String url=a.optString("url","").trim();
                 if(url.isEmpty())continue;
                 String name=a.optString("name","").trim();
-                JSONObject settings=a.optJSONObject("additionalSettings");
-                String desc=settings==null?"":settings.optString("about","");
-                if(desc.isEmpty())desc=a.optString("description","");
+                String desc=obtainiumDescription(a);
                 if(name.isEmpty())name=url;
                 if(url.contains("github.com/")){
                     sources.addGitHub(url,name,desc);
