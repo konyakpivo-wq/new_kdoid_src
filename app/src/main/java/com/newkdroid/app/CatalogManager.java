@@ -33,10 +33,72 @@ public final class CatalogManager {
     public Intent createStorageAccessIntent(){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION|Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);return i;}
     public void saveStorageAccess(Uri uri){try{context.getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}context.getSharedPreferences(PREFS,0).edit().putString(TREE_URI,uri.toString()).apply();}
 
-    /** Reads local numeric .repo files from the selected NKD folder. If none are found, loads the online catalog. */
-    public void loadCatalog(Callback callback){executor.execute(()->{try{List<AppEntry> local=loadLocalNkd();if(!local.isEmpty()){callback.onSuccess(local,local.size());return;}String listing=get(APPREPO_API);JSONArray files=new JSONArray(listing);SortedSet<Integer>ids=new TreeSet<>();Set<String>names=new HashSet<>();for(int i=0;i<files.length();i++){JSONObject f=files.getJSONObject(i);String n=f.optString("name","");names.add(n);if(n.matches("\\d+\\.repo"))ids.add(Integer.parseInt(n.substring(0,n.length()-5)));else if(n.matches("\\d+_repo\\.txt"))ids.add(Integer.parseInt(n.substring(0,n.length()-9)));}List<AppEntry>apps=new ArrayList<>();for(Integer id:ids)try{RepoData d;if(names.contains(id+".repo"))d=parseRepo(get(rawUrl(id+".repo")),id);else d=parseLegacy(id,names);if(d!=null&&!d.repository.isEmpty())apps.add(new AppEntry(id,d.name,d.repository,d.category,d.description,d.icon));}catch(Exception ignored){}callback.onSuccess(apps,apps.size());}catch(Exception e){callback.onError(e);}});}
+    public void loadCatalog(Callback callback){executor.execute(()->{try{
+        List<AppEntry> apps=new ArrayList<>();
+        Set<Integer> usedIds=new HashSet<>();
 
-    private List<AppEntry> loadLocalNkd(){List<AppEntry>out=new ArrayList<>();String s=context.getSharedPreferences(PREFS,0).getString(TREE_URI,null);if(s==null)return out;try{DocumentFile dir=DocumentFile.fromTreeUri(context,Uri.parse(s));if(dir==null||!dir.isDirectory())return out;ArrayList<Integer>ids=new ArrayList<>();HashMap<Integer,DocumentFile>map=new HashMap<>();for(DocumentFile f:dir.listFiles()){String n=f.getName();if(n!=null&&n.matches("\\d+\\.repo")){int id=Integer.parseInt(n.substring(0,n.length()-5));ids.add(id);map.put(id,f);}}Collections.sort(ids);for(int id:ids){DocumentFile f=map.get(id);try(InputStream in=context.getContentResolver().openInputStream(f.getUri())){RepoData d=parseRepo(read(in),id);if(d!=null&&!d.repository.isEmpty())out.add(new AppEntry(id,d.name,d.repository,d.category,d.description,d.icon));}catch(Exception ignored){}}}catch(Exception ignored){}return out;}
+        try{
+            String listing=get(APPREPO_API);
+            JSONArray files=new JSONArray(listing);
+            SortedSet<Integer>ids=new TreeSet<>();
+            Set<String>names=new HashSet<>();
+            for(int i=0;i<files.length();i++){
+                JSONObject f=files.getJSONObject(i);
+                String n=f.optString("name","");
+                names.add(n);
+                if(n.matches("\\d+\\.repo"))ids.add(Integer.parseInt(n.substring(0,n.length()-5)));
+                else if(n.matches("\\d+_repo\\.txt"))ids.add(Integer.parseInt(n.substring(0,n.length()-9)));
+            }
+            for(Integer id:ids)try{
+                RepoData d;
+                if(names.contains(id+".repo"))d=parseRepo(get(rawUrl(id+".repo")),id);
+                else d=parseLegacy(id,names);
+                if(d!=null&&!d.repository.isEmpty()){apps.add(new AppEntry(id,d.name,d.repository,d.category,d.description,d.icon));usedIds.add(id);}
+            }catch(Exception ignored){}
+        }catch(Exception ignored){}
+
+        for(AppEntry local:loadLocalNkd()){
+            if(usedIds.contains(local.id)){
+                int newId=1000000+local.id;
+                apps.add(new AppEntry(newId,local.name,local.repository,local.category,local.description,local.iconUrl));
+            }else{
+                apps.add(local);
+                usedIds.add(local.id);
+            }
+        }
+
+        callback.onSuccess(apps,apps.size());
+    }catch(Exception e){callback.onError(e);}});}
+
+    private List<AppEntry> loadLocalNkd(){
+        List<AppEntry>out=new ArrayList<>();
+        String s=context.getSharedPreferences(PREFS,0).getString(TREE_URI,null);
+        if(s==null)return out;
+        try{
+            DocumentFile dir=DocumentFile.fromTreeUri(context,Uri.parse(s));
+            if(dir==null||!dir.isDirectory())return out;
+            scanNkdDirectory(dir,out);
+        }catch(Exception ignored){}
+        return out;
+    }
+
+    private void scanNkdDirectory(DocumentFile dir,List<AppEntry>out){
+        for(DocumentFile f:dir.listFiles()){
+            String n=f.getName();
+            if(f.isDirectory()){
+                scanNkdDirectory(f,out);
+                continue;
+            }
+            if(n==null||!n.matches("\\d+\\.repo"))continue;
+            try(InputStream in=context.getContentResolver().openInputStream(f.getUri())){
+                if(in==null)continue;
+                RepoData d=parseRepo(read(in),Integer.parseInt(n.substring(0,n.length()-5)));
+                if(d!=null&&!d.repository.isEmpty())
+                    out.add(new AppEntry(Integer.parseInt(n.substring(0,n.length()-5)),d.name,d.repository,d.category,d.description,d.icon));
+            }catch(Exception ignored){}
+        }
+    }
+
     private String read(InputStream in)throws Exception{BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8));StringBuilder b=new StringBuilder();String l;while((l=r.readLine())!=null)b.append(l).append('\n');return b.toString();}
     private String rawUrl(String file){return "https://raw.githubusercontent.com/konyakpivo-wq/new_kdoid/main/apprepo/"+file;}
     private static final class RepoData{String repository,name,description,category,icon;RepoData(String r,String n,String d,String c){this(r,n,d,c,"");}RepoData(String r,String n,String d,String c,String i){repository=r;name=n;description=d;category=c;icon=i;}}
@@ -47,6 +109,6 @@ public final class CatalogManager {
     private String repositoryFromUrl(String url){String s=url==null?"":url.trim();s=s.replaceFirst("\\s*\\(id:\\s*\\d+\\)\\s*$","").trim();if(s.endsWith("/"))s=s.substring(0,s.length()-1);if(s.endsWith(".git"))s=s.substring(0,s.length()-4);int x=s.indexOf("github.com/");return x>=0?s.substring(x+11):s;}
     public void loadReleases(String repository,ReleasesCallback callback){executor.execute(()->{try{JSONArray a=new JSONArray(get("https://api.github.com/repos/"+repository+"/releases?per_page=10"));List<ReleaseEntry>out=new ArrayList<>();for(int i=0;i<a.length();i++){JSONObject o=a.getJSONObject(i);if(o.optBoolean("draft",false))continue;List<AssetEntry>assets=new ArrayList<>();JSONArray aa=o.optJSONArray("assets");if(aa!=null)for(int j=0;j<aa.length();j++){JSONObject z=aa.getJSONObject(j);String download=z.optString("browser_download_url","");if(!download.isEmpty())assets.add(new AssetEntry(z.optString("name"),download));}out.add(new ReleaseEntry(o.optString("tag_name"),o.optString("name"),o.optString("html_url"),o.optString("published_at"),o.optBoolean("prerelease",false),assets));}callback.onSuccess(out);}catch(Exception e){callback.onError(e);}});}
     public static AssetEntry chooseApk(ReleaseEntry r){List<AssetEntry>good=new ArrayList<>();for(AssetEntry a:r.assets){String n=a.name.toLowerCase(Locale.ROOT);if(!n.endsWith(".apk")||n.contains("src")||n.contains("source")||n.contains("debug")||n.contains("test"))continue;good.add(a);}if(good.isEmpty())return null;String arch=android.os.Build.SUPPORTED_ABIS.length>0?android.os.Build.SUPPORTED_ABIS[0]:"";for(AssetEntry a:good){String n=a.name.toLowerCase(Locale.ROOT);if((arch.contains("arm64")&&n.contains("arm64"))||(arch.contains("armeabi")&&n.contains("armeabi"))||(arch.contains("x86_64")&&n.contains("x86_64"))||(arch.equals("x86")&&n.contains("x86")))return a;}for(AssetEntry a:good)if(a.name.toLowerCase(Locale.ROOT).contains("universal"))return a;return good.get(0);}
-    public void downloadApk(String url,File target,DownloadCallback cb){executor.execute(()->{HttpURLConnection c=null;try{c=(HttpURLConnection)new URL(url).openConnection();c.setInstanceFollowRedirects(true);c.setConnectTimeout(15000);c.setReadTimeout(30000);c.setRequestProperty("User-Agent","New-KDroid/0.5");int code=c.getResponseCode();if(code<200||code>=300)throw new IOException("HTTP "+code);long total=c.getContentLengthLong();try(InputStream in=new BufferedInputStream(c.getInputStream());OutputStream out=new BufferedOutputStream(new FileOutputStream(target))){byte[]buf=new byte[8192];long done=0;int len;while((len=in.read(buf))!=-1){out.write(buf,0,len);done+=len;if(total>0)cb.onProgress((int)(done*100/total));}}cb.onProgress(100);cb.onSuccess(target);}catch(Exception e){if(target.exists())target.delete();cb.onError(e);}finally{if(c!=null)c.disconnect();}});}
-    private String get(String address)throws Exception{HttpURLConnection c=(HttpURLConnection)new URL(address).openConnection();c.setRequestMethod("GET");c.setConnectTimeout(10000);c.setReadTimeout(15000);c.setRequestProperty("Accept","application/json, text/plain");c.setRequestProperty("User-Agent","New-KDroid/0.5");try{int code=c.getResponseCode();InputStream s=code>=200&&code<300?c.getInputStream():c.getErrorStream();if(s==null)throw new IOException("HTTP "+code);String b=read(s);if(code<200||code>=300)throw new IOException("HTTP "+code);return b;}finally{c.disconnect();}}
+    public void downloadApk(String url,File target,DownloadCallback cb){executor.execute(()->{HttpURLConnection c=null;try{c=(HttpURLConnection)new URL(url).openConnection();c.setInstanceFollowRedirects(true);c.setConnectTimeout(15000);c.setReadTimeout(30000);c.setRequestProperty("User-Agent","New-KDroid/1.1.0");int code=c.getResponseCode();if(code<200||code>=300)throw new IOException("HTTP "+code);long total=c.getContentLengthLong();try(InputStream in=new BufferedInputStream(c.getInputStream());OutputStream out=new BufferedOutputStream(new FileOutputStream(target))){byte[]buf=new byte[8192];long done=0;int len;while((len=in.read(buf))!=-1){out.write(buf,0,len);done+=len;if(total>0)cb.onProgress((int)(done*100/total));}}cb.onProgress(100);cb.onSuccess(target);}catch(Exception e){if(target.exists())target.delete();cb.onError(e);}finally{if(c!=null)c.disconnect();}});}
+    private String get(String address)throws Exception{HttpURLConnection c=(HttpURLConnection)new URL(address).openConnection();c.setRequestMethod("GET");c.setConnectTimeout(10000);c.setReadTimeout(15000);c.setRequestProperty("Accept","application/json, text/plain");c.setRequestProperty("User-Agent","New-KDroid/1.1.0");try{int code=c.getResponseCode();InputStream s=code>=200&&code<300?c.getInputStream():c.getErrorStream();if(s==null)throw new IOException("HTTP "+code);String b=read(s);if(code<200||code>=300)throw new IOException("HTTP "+code);return b;}finally{c.disconnect();}}
 }
