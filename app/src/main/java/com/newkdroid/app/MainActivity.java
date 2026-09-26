@@ -343,10 +343,29 @@ public class MainActivity extends Activity {
     private JSONArray obtainiumApps(String text)throws Exception{
         if(text==null||text.trim().isEmpty())throw new IOException("Пустой JSON");
         String s=text.trim();
+
         if(s.startsWith("["))return new JSONArray(s);
+
         JSONObject root=new JSONObject(s);
-        JSONArray wrapped=root.optJSONArray("apps");
-        if(wrapped!=null)return wrapped;
+
+        // Поддерживаем все основные форматы Obtainium:
+        // 1) массив приложений
+        // 2) {"apps":[...]}
+        // 3) {"configs":[...]} — каталог apps.obtainium.imranr.dev
+        // 4) {"config":{...}} — простой файл каталога
+        JSONArray apps=root.optJSONArray("apps");
+        if(apps!=null)return apps;
+
+        JSONArray configs=root.optJSONArray("configs");
+        if(configs!=null)return configs;
+
+        JSONObject config=root.optJSONObject("config");
+        if(config!=null){
+            JSONArray one=new JSONArray();
+            one.put(config);
+            return one;
+        }
+
         JSONArray one=new JSONArray();
         one.put(root);
         return one;
