@@ -102,9 +102,18 @@ public class MainActivity extends Activity {
     private void render(String q0){
         list.removeAllViews();
         String q=q0==null?"":q0.trim().toLowerCase(Locale.ROOT);
+        int shown=0;
+        final int MAX_CARDS=100;
         for(CatalogManager.AppEntry a:allApps){
             if(!q.isEmpty()&&!(a.name+" "+a.description+" "+a.category).toLowerCase(Locale.ROOT).contains(q))continue;
+            if(shown++>=MAX_CARDS)break;
             addCard(a);
+        }
+        if(shown>=MAX_CARDS){
+            TextView more=label("Показаны первые "+MAX_CARDS+" результатов. Уточни поиск, чтобы найти нужное приложение.",14,Color.LTGRAY);
+            more.setGravity(Gravity.CENTER);
+            more.setPadding(16,12,16,20);
+            list.addView(more,new LinearLayout.LayoutParams(-1,-2));
         }
         if(list.getChildCount()==0){
             TextView e=label("Ничего не найдено",18,Color.LTGRAY);
@@ -115,7 +124,19 @@ public class MainActivity extends Activity {
 
     private void showCategory(String c){
         list.removeAllViews();
-        for(CatalogManager.AppEntry a:allApps)if(c.equals(a.category))addCard(a);
+        int shown=0;
+        final int MAX_CARDS=100;
+        for(CatalogManager.AppEntry a:allApps){
+            if(!c.equals(a.category))continue;
+            if(shown++>=MAX_CARDS)break;
+            addCard(a);
+        }
+        if(shown>=MAX_CARDS){
+            TextView more=label("Показаны первые "+MAX_CARDS+" приложений категории. Используй поиск.",14,Color.LTGRAY);
+            more.setGravity(Gravity.CENTER);
+            more.setPadding(16,12,16,20);
+            list.addView(more,new LinearLayout.LayoutParams(-1,-2));
+        }
         if(list.getChildCount()==0){
             TextView e=label("В этой категории пока нет приложений",16,Color.LTGRAY);
             e.setGravity(Gravity.CENTER);
