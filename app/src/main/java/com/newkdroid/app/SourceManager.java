@@ -134,7 +134,8 @@ public final class SourceManager {
         String desc=source.description.isEmpty()?info.optString("description","GitHub repository"):source.description;
         JSONObject owner=info.optJSONObject("owner");
         String icon=owner==null?"":owner.optString("avatar_url","");
-        CatalogManager.AppEntry app=new CatalogManager.AppEntry(id,name,repo,"Сторонние",desc,icon);\n        out.add(app); cb.item(app);
+        CatalogManager.AppEntry app=new CatalogManager.AppEntry(id,name,repo,"Сторонние",desc,icon);
+        out.add(app); cb.item(app);
     }
 
     /*
