@@ -144,6 +144,7 @@ public final class SourceManager {
         c.setReadTimeout(90000);
         c.setRequestProperty("User-Agent","New-KDroid/1.1.0");
         c.setRequestProperty("Accept","application/json");
+        int[] next={id};
 
         try {
             int code=c.getResponseCode();
@@ -153,7 +154,6 @@ public final class SourceManager {
 
                 reader.beginObject();
                 HashMap<String,Meta> metadata=new HashMap<>();
-                int[] next={id};
                 while(reader.hasNext()){
                     String key=reader.nextName();
                     if("apps".equals(key)){
